@@ -53,9 +53,7 @@ double Kp = 0.5, Ki = 0.0, Kd = 0.05;
 PID pidH(&inputH, &outputH, &setpointH, Kp, Ki, Kd, REVERSE);
 PID pidV(&inputV, &outputV, &setpointV, Kp, Ki, Kd, REVERSE);
 
-// True quando il rispettivo PID sta effettivamente guidando il motore (fuori dalla
-// zona morta, in inseguimento normale). Usato per capire quando serve un reset
-// "bumpless" dell'integrale prima di riprendere a inseguire (vedi resetPID()).
+// True quando il rispettivo PID sta effettivamente guidando il motore 
 bool pidActiveH = false;
 bool pidActiveV = false;
 
@@ -71,13 +69,13 @@ bool puntoMortoAbilitato = true;
 // Isteresi sulla zona morta: per uscire dalla sosta serve superare zonaMorta per intero,
 // ma per rientrarci basta scendere sotto zonaMorta*RATIO. Senza questa differenza tra le
 // due soglie, un errore che oscilla per rumore proprio attorno a zonaMorta farebbe
-// accendere/spegnere il PID continuamente (chattering) ad ogni ciclo di loop().
+// accendere/spegnere il PID continuamente ad ogni ciclo di loop().
 const float DEADZONE_HYSTERESIS_RATIO = 0.6f;
 
-// Velocità ridotta in AUTO per test (servi lenti per evitare overshoot)
+// Velocità ridotta in AUTO per test 
 int maxAutoSpeed = 3; // Limite di velocità per rotazione fluida e precisa in AUTO
 
-// Opzione Finecorsa Hardware (Limit Switches) Asse Y
+// Opzione Finecorsa Hardware  Asse Y
 const bool USE_HARDWARE_LIMITS = false;
 const int pinLimitYMin = 22;
 const int pinLimitYMax = 23;
@@ -86,9 +84,9 @@ const int pinLimitYMax = 23;
 int manualVelH = 0; // -15 a +15
 int manualVelV = 0; // -15 a +15
 
-// Failsafe controllo manuale: se non arriva nessun comando (nemmeno "stop") entro
+// Failsafe controllo manuale: se non arriva nessun comando entro
 // questo intervallo, il tracker torna da solo in AUTO invece di restare fermo in
-// manuale a tempo indeterminato (es. connessione client persa a metà movimento).
+// manuale a tempo indeterminato 
 const unsigned long MANUAL_TIMEOUT_MS = 2000;
 unsigned long lastManualCmdMillis = 0;
 
@@ -109,20 +107,12 @@ bool puntoMortoAttivo = false; // True se rilevato punto morto diagonale
 bool isSearchingSun = false;   // True durante la scansione ricerca sole
 bool isAutotuning = false;     // True durante il test di autotuning PID (relay feedback)
 
-// Filtro passa-basso (media mobile esponenziale) sulle letture LDR grezze: l'ADC
-// dell'ESP32 è rumoroso, e alimentare il PID con un errore rumoroso si traduce in
-// micro-oscillazioni dei servo. La costante di tempo (non un semplice alpha fisso)
-// rende il filtro indipendente dalla durata reale del ciclo di loop() — importante
-// ora che il delay(10) di fine loop viene rimosso e il periodo di iterazione non è
-// più costante.
+// Filtro passa-basso (media mobile esponenziale) sulle letture LDR grezze
 const float LDR_FILTER_TAU_S = 0.15f;
 float filtTL = 0, filtTR = 0, filtBL = 0, filtBR = 0;
 bool ldrFilterInit = false;
 
 // Fattori di calibrazione per compensare le differenze di sensibilità tra i 4 LDR
-// (fototransistor/LDR reali non sono mai perfettamente identici). Applicati alla
-// lettura grezza prima del filtro. 1.0 = nessuna correzione (default finché non si
-// esegue /api/calibrate).
 float calTL = 1.0f, calTR = 1.0f, calBL = 1.0f, calBR = 1.0f;
 
 // Oversampling ADC: più letture consecutive mediate riducono il rumore residuo
@@ -140,8 +130,7 @@ bool servosPowerSaved = false;
 int lastPulseHus = 1500;
 int lastPulseVus = 1500;
 
-// Preferences NVS unica per energia accumulata e impostazioni persistenti
-// (taratura PID, soglie, calibrazione LDR, abilitazione punto morto).
+// Preferences NVS
 Preferences prefs;
 unsigned long lastEnergySaveMs = 0;
 const unsigned long ENERGY_SAVE_INTERVAL_MS = 5UL * 60UL * 1000UL; // ogni 5 min, per limitare l'usura della flash
@@ -154,9 +143,7 @@ unsigned long lastPosUpdate = 0;
 double activeSpeedH = 0;
 double activeSpeedV = 0;
 
-// Logging in RAM con esportazione CSV: utile per registrare l'andamento di errore e
-// impulsi servo durante una prova (es. per la taratura del PID) senza dover tenere
-// un monitor seriale collegato per tutta la durata del test.
+// Logging in RAM con esportazione CSV
 struct LogSample {
   uint32_t t;
   int16_t errH, errV, pulseH, pulseV, tl, tr, bl, br;
@@ -169,21 +156,13 @@ unsigned int logIntervalMs = 100;
 unsigned long logStartMillis = 0;
 unsigned long lastLogSampleMillis = 0;
 
-// ============================================================================
 // AUTOTUNING PID — Relay Feedback (Åström–Hägglund)
-// ============================================================================
-// Sostituisce temporaneamente il PID con un relè bang-bang (uscita fissa +-d a
-// seconda del segno dell'errore): il sistema si mette ad oscillare da solo, e
-// dalla frequenza/ampiezza dell'oscillazione risultante si stima il guadagno
-// critico Ku e il periodo critico Pu del processo, senza bisogno di un modello
-// esplicito. Da Ku/Pu si ricavano poi Kp/Ki/Kd con le formule di Ziegler-Nichols
-// ad anello chiuso.
 const double RELAY_AMPLITUDE = 2.0;         // "d": velocità fissa comandata dal relè
-const double RELAY_HYSTERESIS = 40.0;       // banda morta di commutazione, evita scatti spuri da rumore residuo
-const int RELAY_DISCARD_HALFCYCLES = 6;     // scarta il transitorio iniziale (~3 cicli)
-const int RELAY_COLLECT_HALFCYCLES = 14;    // poi raccoglie altri ~7 cicli (14 semicicli) per la stima
+const double RELAY_HYSTERESIS = 40.0;       // banda morta di commutazione
+const int RELAY_DISCARD_HALFCYCLES = 6;     // scarta il transitorio iniziale 
+const int RELAY_COLLECT_HALFCYCLES = 14;    //  ~7 cicli per la stima
 const unsigned long RELAY_SAMPLE_INTERVAL_MS = 20;
-const unsigned long RELAY_TIMEOUT_MS = 45000; // failsafe: se non oscilla a sufficienza, abbandona il test
+const unsigned long RELAY_TIMEOUT_MS = 45000; // failsafe
 
 // Stato del relè per un singolo asse (H o V), aggiornato un campione alla volta.
 struct RelayAxisState {
@@ -225,11 +204,6 @@ void handleApiLogStatus();
 void handleApiLogCsv();
 void handleApiAutotune();
 
-// Converte una velocità continua (-maxAutoSpeed..+maxAutoSpeed, uscita del PID) in un
-// impulso in microsecondi, superando la deadband hardware del servo 360° (~1450-1550us).
-// Stessa formula usata in precedenza per i soli valori interi, qui generalizzata al continuo
-// cosi' l'uscita del PID (che varia con continuità) si traduce in una velocità realmente
-// proporzionale invece che in 3 soli gradini fissi.
 int speedToPulseUS(double speed, int stopUS) {
   if (speed > 0.02) {
     return stopUS - (int)round(45 + speed * 25);
@@ -238,8 +212,6 @@ int speedToPulseUS(double speed, int stopUS) {
   }
   return stopUS;
 }
-
-// Funzioni di gestione avanzata Servo 360 in Microsecondi (Superamento Deadband Hardware)
 void setServoH(double speed) {
   if (!servoH.attached()) {
     servoH.attach(pinServoH, 1000, 2000);
@@ -251,11 +223,7 @@ void setServoH(double speed) {
 }
 
 // Il servo verticale è montato fisicamente con orientamento invertito rispetto
-// a quello orizzontale: a parità di segno della velocità logica (positivo = su,
-// negativo = giù, stessa convenzione usata da PID, D-pad manuale e ricerca sole)
-// il servo V ruota nel verso opposto. Si inverte qui, in un unico punto, cosi'
-// tutto il resto del firmware continua a ragionare con "positivo = su" senza
-// bisogno di modifiche sparse in più punti del codice.
+// a quello orizzontale
 void setServoV(double speed) {
   if (!servoV.attached()) {
     servoV.attach(pinServoV, 1000, 2000);
@@ -271,11 +239,7 @@ void stopServos() {
   setServoV(0);
 }
 
-// Stacca il segnale PWM dai servo dopo averli portati a zero: da fermi non serve
-// tenerli agganciati all'impulso neutro, quindi si risparmia la corrente di riposo
-// del loro amplificatore interno. Il flag evita di richiamare detach()/attach() a
-// ogni ciclo di loop() mentre si resta in Notte/Eco. Vengono riagganciati in modo
-// trasparente al primo comando reale in setServoH()/setServoV().
+// Stacca il segnale PWM dai servo dopo averli portati a zero
 void powerSaveServos() {
   if (servosPowerSaved) return;
   stopServos();
@@ -288,7 +252,7 @@ void powerSaveServos() {
 // Azzera il termine integrale e lo storico del PID (transizione MANUAL->AUTOMATIC
 // forza una reinizializzazione "bumpless" in PID_v1). Va chiamato ogni volta che il
 // tracker si ferma o esce dall'inseguimento continuo, altrimenti l'integrale accumulato
-// durante la sosta genererebbe uno scatto (windup) al rientro in modalità AUTO.
+// durante la sosta genererebbe uno scatto  al rientro in modalità AUTO.
 void resetPID(PID &pid) {
   pid.SetMode(MANUAL);
   pid.SetMode(AUTOMATIC);
@@ -341,10 +305,7 @@ void saveSettingsToNVS() {
 }
 
 /**
- * Calibrazione dei 4 LDR: da eseguire con i sensori sotto luce uniforme (es. una
- * lampada posta equidistante da tutti e 4). Calcola per ciascun sensore un fattore
- * moltiplicativo che lo riporta alla media degli altri, compensando le differenze
- * di sensibilità tra fotoresistenze reali (mai perfettamente identiche).
+ * Calibrazione dei 4 LDR
  */
 void calibrateLDRs() {
   const int N = 10;
@@ -433,11 +394,9 @@ bool runRelayAutotune(double &outKp, double &outKi, double &outKd) {
   RelayAxisState stH, stV;
   stH.lastSwitchMs = stV.lastSwitchMs = millis();
 
-  // Riusa il buffer di log esistente (stesso struct/array di /api/log/*) per
+  // Riusa il buffer di log esistente per
   // registrare il transitorio del test, cosi' è ispezionabile via /api/log/csv
-  // subito dopo. Il campionamento qui è manuale (non quello automatico di
-  // loop(), che durante il test non gira: questa è una routine bloccante come
-  // eseguiRicercaSole()).
+  // subito dopo. Il campionamento qui è manuale 
   logCount = 0;
   logStartMillis = millis();
   loggingActive = false;
@@ -484,7 +443,7 @@ bool runRelayAutotune(double &outKp, double &outKi, double &outKd) {
   delay(200);
 
   // Ku = 4d/(pi*a), a = semi-ampiezza = (picco max - picco min)/2,
-  // Pu = periodo medio dell'oscillazione completa (2x la durata media dei semicicli).
+  // Pu = periodo medio dell'oscillazione completa
   auto computeKuPu = [](RelayAxisState &st, double &ku, double &pu) {
     double avgPos = st.posPeakCount > 0 ? (st.posPeakSum / st.posPeakCount) : 0;
     double avgNeg = st.negPeakCount > 0 ? (st.negPeakSum / st.negPeakCount) : 0;
@@ -517,11 +476,7 @@ bool runRelayAutotune(double &outKp, double &outKi, double &outKd) {
   return true;
 }
 
-/**
- * Procedura di Ricerca Sole all'Avvio (Sun Finding Routine)
- * Esegue una scansione a 360° per individuare il punto di massima luminosità
- * e orienta il pannello solare direttamente verso il sole.
- */
+
 void eseguiRicercaSole() {
   Serial.println("\n==================================================");
   Serial.println("☀️ [SUN FINDER] AVVIO PROCEDURA RICERCA SOLE");
@@ -550,7 +505,7 @@ void eseguiRicercaSole() {
     return;
   }
 
-  // 2. Scansione Orizzontale a 360° (durata ~6s a velocità costante)
+  // 2. Scansione Orizzontale a 360° 
   const int searchSpeed = 4;
   const unsigned long SCAN_DURATION_MS = 6000;
   const unsigned long SAMPLE_INTERVAL_MS = 50;
@@ -715,7 +670,7 @@ void loop() {
     if (posV < -60.0f) posV = -60.0f;
   }
 
-  // 1. Lettura Sensori LDR (oversampled, calibrati e filtrati) e Calcolo Diagonali
+  // 1. Lettura Sensori LDR  e Calcolo Diagonali
   float rawTL = readLDROversampled(ldrTL) * calTL;
   float rawTR = readLDROversampled(ldrTR) * calTR;
   float rawBL = readLDROversampled(ldrBL) * calBL;
@@ -751,7 +706,7 @@ void loop() {
 
   // 2. Lettura e Calcolo Rendimento Solare (Voltage Divider / Sensore)
   int rawADC = analogRead(pinSolarVolt);
-  // Lettura reale della tensione solare dal pin (Partitore R1=10k, R2=10k o simile)
+  // Lettura reale della tensione solare dal pin (Partitore R1=10k, R2=10k)
   solarVoltage = (rawADC / 4095.0) * 3.3 * 2.0; 
   
   // Se la tensione letta è trascurabile (< 0.1V), considera il pannello scollegato (0V, 0mA)
@@ -810,14 +765,13 @@ void loop() {
       // 4. LOGICA RISOLUZIONE PUNTO MORTO DIAGONALE:
       // Se l'errore H e V sono a zero (o entro la zona morta),
       // MA la differenza tra le diagonali è altissima (|diffDiagonali| >= sogliaPuntoMorto),
-      // siamo nel punto morto (sella/falso equilibrio): spostiamo la posizione per sbloccare il sistema.
+      // siamo nel punto morto : spostiamo la posizione per sbloccare il sistema.
       bool errHZero = (abs(rawH) <= zonaMorta);
       bool errVZero = (abs(rawV) <= zonaMorta);
       bool diagAltissima = (abs(diffDiagonali) >= sogliaPuntoMorto);
 
       if (puntoMortoAbilitato && errHZero && errVZero && diagAltissima) {
-        // --- SIAMO NEL PUNTO MORTO: SPOSTIAMO LA POSIZIONE ---
-        puntoMortoAttivo = true;
+          puntoMortoAttivo = true;
 
         int escapeSpeedH = 0;
         int escapeSpeedV = 0;
@@ -858,22 +812,14 @@ void loop() {
         outputV = escapeSpeedV;
         inputH = rawH;
         inputV = rawV;
-        // Durante lo sblocco il PID non guida i motori: quando torneremo
-        // all'inseguimento normale dovrà ripartire senza integrale residuo.
         pidActiveH = false;
         pidActiveV = false;
       } else {
-        // --- NORMALE INSEGUIMENTO PID: SE ERRORE E' ZERO STA FERMO, ALTRIMENTI SEGUE LA LUCE ---
         puntoMortoAttivo = false;
 
         inputH = rawH;
         inputV = rawV;
 
-        // Asse Orizzontale: zona morta con isteresi. Per ATTIVARSI serve superare
-        // zonaMorta per intero; una volta attivo, per FERMARSI di nuovo serve scendere
-        // sotto una soglia più bassa (zonaMorta*RATIO). Cosi' un errore che oscilla per
-        // rumore residuo proprio al bordo di zonaMorta non fa accendere/spegnere il PID
-        // ad ogni ciclo. Da fermo il PID viene azzerato per non far derivare l'integrale.
         double parkThresholdH = zonaMorta * DEADZONE_HYSTERESIS_RATIO;
         bool shouldParkH = pidActiveH ? (abs(inputH) <= parkThresholdH) : (abs(inputH) <= zonaMorta);
         if (shouldParkH) {
@@ -902,10 +848,6 @@ void loop() {
 
     case MODE_MANUAL: {
       puntoMortoAttivo = false;
-      // Failsafe: se non arriva nessun comando (nemmeno "stop") entro il timeout,
-      // il tracker non resta fermo in manuale a tempo indeterminato ma torna da
-      // solo in AUTO (es. connessione persa a metà movimento, tab del browser
-      // chiusa con un tasto ancora "premuto" lato client).
       if (millis() - lastManualCmdMillis > MANUAL_TIMEOUT_MS) {
         stopServos();
         manualVelH = 0;
@@ -978,7 +920,7 @@ void loop() {
     }
   }
 
-  // Campionamento log CSV in RAM (se attivo), a intervallo configurabile
+  // Campionamento log CSV in RAM, a intervallo configurabile
   // indipendente dalla velocità del loop.
   if (loggingActive) {
     unsigned long tNow = millis();
@@ -1012,11 +954,6 @@ void loop() {
                   valDiag1, valDiag2, diffDiagonali,
                   solarVoltage, solarPower);
   }
-
-  // Nessun delay(10) fisso di fine ciclo: il calcolo del PID è già regolato in
-  // modo indipendente da SetSampleTime(50), e il filtro LDR usa una costante di
-  // tempo reale (non un alpha fisso) proprio per restare corretto anche con un
-  // periodo di loop() variabile e più veloce.
 }
 
 // Setup Rotte WebServer
@@ -1062,13 +999,6 @@ void handleRoot() {
 }
 
 void handleApiData() {
-  // Il browser interroga questo endpoint ogni 500ms per tutto il tempo in cui la
-  // pagina resta aperta e connessa: usarlo come "battito cardiaco" del failsafe
-  // manuale evita che il tracker torni in AUTO da solo dopo un singolo click su
-  // un tasto del D-pad (il comando viene inviato una volta sola, non ripetuto
-  // finché il tasto resta "attivo"). Il failsafe scatta comunque, ma solo se la
-  // pagina viene davvero chiusa o la connessione cade, cioè esattamente il caso
-  // che doveva coprire fin dall'inizio.
   if (currentMode == MODE_MANUAL) {
     lastManualCmdMillis = millis();
   }
@@ -1143,8 +1073,6 @@ void handleApiData() {
 void handleApiMode() {
   if (server.hasArg("mode")) {
     String m = server.arg("mode");
-    // Ogni cambio di modalità riparte con l'integrale del PID azzerato, cosi' non si
-    // trascina mai uno stato accumulato da prima del cambio (transfer "bumpless").
     resetPID(pidH);
     resetPID(pidV);
     pidActiveH = false;
@@ -1157,8 +1085,6 @@ void handleApiMode() {
     } else if (m == "manual") {
       currentMode = MODE_MANUAL;
       modeString = "manual";
-      // Evita che il failsafe di MODE_MANUAL (Sezione loop) scatti subito, prima
-      // ancora che arrivi il primo comando reale da /api/control.
       lastManualCmdMillis = millis();
     } else if (m == "night") {
       currentMode = MODE_NIGHT;
@@ -1189,7 +1115,7 @@ void handleApiControl() {
     String cmd = server.arg("cmd");
     currentMode = MODE_MANUAL;
     modeString = "manual";
-    lastManualCmdMillis = millis(); // vedi failsafe MANUAL_TIMEOUT_MS in loop()
+    lastManualCmdMillis = millis(); 
 
     if (cmd == "up") {
       manualVelV = 12; // Ruota in alto
@@ -1227,11 +1153,6 @@ void handleApiPID() {
     else if (name == "night") sogliaNotte = val.toInt();
     else if (name == "pmEnabled") puntoMortoAbilitato = (val == "1" || val == "true");
   }
-
-  // Validazione: valori fuori range (es. guadagni negativi, deadzone assurda) accettati
-  // senza controllo potrebbero "spegnere" l'inseguimento in modo silenzioso e poco
-  // comprensibile da UI. I guadagni negativi in particolare invertirebbero il verso
-  // di correzione del PID (vedi la nota REVERSE sulla dichiarazione di pidH/pidV).
   Kp = constrain(Kp, 0.0, 50.0);
   Ki = constrain(Ki, 0.0, 50.0);
   Kd = constrain(Kd, 0.0, 50.0);
@@ -1255,18 +1176,12 @@ void handleApiPID() {
   server.send(200, "application/json", jsonBuffer);
 }
 
-// Non blocca la risposta HTTP per i ~6-7s della scansione: imposta solo la
-// modalità e risponde subito. La scansione vera e propria parte al giro
-// successivo di loop(), quando case MODE_SEARCH_SUN chiama eseguiRicercaSole().
 void handleApiFindSun() {
   currentMode = MODE_SEARCH_SUN;
   modeString = "findsun";
   server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Ricerca sole avviata\"}");
 }
 
-// Calibrazione LDR: blocca per ~350ms (10 campioni x 20ms + overhead), come
-// eseguiRicercaSole() blocca per la scansione. Va eseguita con i 4 sensori sotto
-// luce uniforme.
 void handleApiCalibrate() {
   calibrateLDRs();
   char jsonBuffer[160];
@@ -1277,12 +1192,6 @@ void handleApiCalibrate() {
   server.send(200, "application/json", jsonBuffer);
 }
 
-// Non blocca la risposta HTTP per la durata del test (fino a RELAY_TIMEOUT_MS):
-// imposta solo la modalità e risponde subito, esattamente come /api/findsun. Il
-// test vero e proprio parte al giro successivo di loop(), quando
-// case MODE_AUTOTUNE chiama runRelayAutotune(). Il risultato (nuovi Kp/Ki/Kd,
-// se il test converge) va poi letto dal client via polling di /api/data,
-// osservando quando il campo "autotuning" torna a false.
 void handleApiAutotune() {
   currentMode = MODE_AUTOTUNE;
   modeString = "autotune";
@@ -1319,10 +1228,6 @@ void handleApiLogStatus() {
   server.send(200, "application/json", jsonBuffer);
 }
 
-// Esporta il buffer di log come CSV in download. Da chiamare dopo /api/log/stop
-// per avere un numero di campioni stabile durante l'export (se il logging è
-// ancora attivo mentre si scarica, il file riflette comunque solo i campioni
-// già presenti in buffer al momento della chiamata, senza inconsistenze).
 void handleApiLogCsv() {
   server.sendHeader("Content-Disposition", "attachment; filename=solar_log.csv");
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
