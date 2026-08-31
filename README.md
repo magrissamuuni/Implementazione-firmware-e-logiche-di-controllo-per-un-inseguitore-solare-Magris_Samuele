@@ -11,6 +11,7 @@ Università degli Studi di Padova. Relatore: Prof. Damiano Varagnolo.
 
 ## Indice
 
+- [Introduzione](#introduzione)
 - [Hardware](#hardware)
 - [Firmware](#firmware)
 - [Interfaccia web](#interfaccia-web)
@@ -18,7 +19,13 @@ Università degli Studi di Padova. Relatore: Prof. Damiano Varagnolo.
 - [Metodologia sperimentale](#metodologia-sperimentale)
 - [Struttura del repository](#struttura-del-repository)
 - [Documentazione](#documentazione)
-- [Licenza](#licenza)
+- 
+## Introduzione
+L'obiettivo di questa Tesi è quello di costruire un dispositivo in grado di posizionare un pannello solare nella posizione ottimale rispetto al sole e di valutarne l'efficienza.
+
+In particolare si vuole valutare l'efficienza di un dispositivo biassiale e confrontare i dati acquisiti con l'efficienza di un sistema fisso.
+
+
 
 ## Hardware
 
