@@ -23,7 +23,7 @@ Università degli Studi di Padova. Relatore: Prof. Damiano Varagnolo.
 ## Introduzione
 L'obiettivo di questa Tesi è quello di costruire un dispositivo in grado di posizionare un pannello solare nella posizione ottimale rispetto al sole e di valutarne l'efficienza.
 
-In particolare si vuole valutare l'efficienza di un dispositivo biassiale e confrontare i dati acquisiti con l'efficienza di un sistema fisso.
+Massimizzare il tempo passato perpendicolarmente al sole è uno dei metodi migliori per massimizzare l'efficienza di un pannello fotovoltaico.
 
 
 
