@@ -9,7 +9,6 @@ Relatore: Prof. Damiano Varagnolo.
 - [Hardware](#hardware)
 - [Firmware](#firmware)
 - [Interfaccia web](#interfaccia-web)
-- [Analisi dati](#analisi-dati)
 - [Metodologia sperimentale](#metodologia-sperimentale)
 - [Struttura del repository](#struttura-del-repository)
 - [Documentazione](#documentazione)
@@ -48,13 +47,13 @@ Il firmware deve:
 
 ### Mappa dei pin
 
-Servo orizzontale (H) = 19 
-Servo verticale (V) = 18  
-LDR Alto-Sinistra (TL) = 35
-LDR Alto-Destra (TR) = 33
-LDR Basso-Sinistra (BL) = 34
-LDR Basso-Destra (BR) = 32
-Tensione pannello solare = 36 
+- Servo orizzontale (H) = 19
+- Servo verticale (V) = 18 
+- LDR Alto-Sinistra (TL) = 35
+- LDR Alto-Destra (TR) = 33
+- LDR Basso-Sinistra (BL) = 34
+- LDR Basso-Destra (BR) = 32
+- Tensione pannello solare = 36
 
 ## Firmware
 
