@@ -27,6 +27,7 @@ L'obiettivo è quello di creare un sistema indipendente in grado di autosostener
 Il sistema deve essere in grado di:
 - riconoscere la posizione del punto di massima luminosità e orientare il pannello verso di esso;
 - evitare micro-movimenti una volta raggiunto tale punto (causati da valori diversi sulle fotoresistenze).
+
 Il firmware deve:
 - implementare una interfaccia per l'utilizzo del sistema;
 - implementare un controllore PID e permetterne la modifica dei parametri;
