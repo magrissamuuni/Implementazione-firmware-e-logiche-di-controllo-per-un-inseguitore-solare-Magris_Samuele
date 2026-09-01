@@ -1,17 +1,11 @@
-# Solar Tracker Biassiale con ESP32
-
-Inseguitore solare a due assi (orizzontale/verticale) basato su microcontrollore
-ESP32, con controllo PID reale, autotuning automatico via relay feedback,
-interfaccia web integrata e un set di script Python per l'analisi statistica
-delle prove sperimentali (Design of Experiments).
-
 Progetto sviluppato nell'ambito della tesi di laurea triennale
- Dipartimento di Ingegneria dell'Informazione,
-Università degli Studi di Padova. Relatore: Prof. Damiano Varagnolo.
+Dipartimento di Ingegneria dell'Informazione, Università degli Studi di Padova. 
+Relatore: Prof. Damiano Varagnolo.
 
 ## Indice
 
 - [Introduzione](#introduzione)
+- [Obiettivi](#obiettivi)
 - [Hardware](#hardware)
 - [Firmware](#firmware)
 - [Interfaccia web](#interfaccia-web)
@@ -21,12 +15,25 @@ Università degli Studi di Padova. Relatore: Prof. Damiano Varagnolo.
 - [Documentazione](#documentazione)
 - 
 ## Introduzione
-L'obiettivo di questa Tesi è quello di costruire un dispositivo in grado di posizionare un pannello solare nella posizione ottimale rispetto al sole e di valutarne l'efficienza.
+Le fonti rinnovabili di energia sono viste come un'alternativa affidabile ai combustibili fossili grazie alla loro capacità di essere inesauribili.
+L'energia solare fotovoltaica è una delle fonti rinnovabili più a portata di mano rispetto all'energia geotermica, idrica, bioenergia oppure eolica.
+Massimizzare il tempo passato perpendicolarmente al sole è uno dei metodi migliori per massimizzare l'efficienza di un pannello fotovoltaico. //Trovare Fonte
+Per fare ciò, sistemi di tracciamento permettono ai pannelli solari di rimanere perpendicolari ai raggi solari per la maggior parte della giornata.
+Lo scopo di questo progetto è quello di sviluppare un prototipo bi-assiale a scala ridotta di un sistema di tracciamento solare mediante l'uso di fotoresistenze per tracciare la posizione del sole.
 
-Massimizzare il tempo passato perpendicolarmente al sole è uno dei metodi migliori per massimizzare l'efficienza di un pannello fotovoltaico.
+## Obiettivi
 
+L'obiettivo è quello di creare un sistema indipendente in grado di autosostenersi.
+Il sistema deve essere in grado di:
+- riconoscere la posizione del punto di massima luminosità e orientare il pannello verso di esso;
+- evitare micro-movimenti una volta raggiunto tale punto (causati da valori diversi sulle fotoresistenze).
+Il firmware deve:
+- implementare una interfaccia per l'utilizzo del sistema;
+- implementare un controllore PID e permetterne la modifica dei parametri;
+- raccogliere le informazioni e i dati riguardo a: errori dei servomotori, luminosità delle fotoresistenze e parametri dei pannelli fotovoltaici;
+- gestire il movimento dei servo-motori;
 
-
+//TODO finire
 ## Hardware
 
 - Microcontrollore: ESP32 WROOM [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
@@ -101,7 +108,7 @@ Risultati completi in:
 //TODO
 
 ## Struttura del repository
-
+//TODO rifinire a progetto terminato
 ```
 solar-tracker-esp32/
 ├── firmware/
@@ -120,7 +127,7 @@ solar-tracker-esp32/
 ```
 
 ## Documentazione
- [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
+[ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
 [LDR](Datasheet/GL55-LDR%20DataSheet.pdf)
 [SG90](Datasheet/SG90%20DataSheet.pdf)
 [103450](Datasheet/Battery%203.7%20V%202000mAh%20103450%20DataSheet.pdf)
