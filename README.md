@@ -12,7 +12,6 @@ Relatore: Prof. Damiano Varagnolo.
 - [Metodologia sperimentale](#metodologia-sperimentale)
 - [Struttura del repository](#struttura-del-repository)
 - [Documentazione](#documentazione)
-- 
 ## Introduzione
 Le fonti rinnovabili di energia sono viste come un'alternativa affidabile ai combustibili fossili grazie alla loro capacità di essere inesauribili.
 L'energia solare fotovoltaica è una delle fonti rinnovabili più a portata di mano rispetto all'energia geotermica, idrica, bioenergia oppure eolica.
