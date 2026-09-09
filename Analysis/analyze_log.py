@@ -1,46 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-analyze_log.py — Analisi dei CSV esportati dal solar tracker (/api/log/csv)
-
-Colonne attese nel CSV: t_ms,errH,errV,pulseH_us,pulseV_us,tl,tr,bl,br
-
-AGGIORNATO alla versione firmware con: isteresi sulla zona morta
-(DEADZONE_HYSTERESIS_RATIO), autotuning relay feedback integrato in
-firmware (con isteresi RELAY_HYSTERESIS sulla commutazione del relè) e
-MODE_AUTOTUNE. Le costanti qui sotto rispecchiano quelle nel main.cpp:
-se le cambi nel firmware, cambiale anche qui per restare coerenti.
-
-Due modalita':
-
-1) DOE — estrae errore residuo, overshoot e tempo di assestamento da una
-   singola prova, oppure elabora in batch tutte le prove di una cartella e
-   produce un riepilogo in un unico CSV. Il tempo di assestamento ora usa
-   la soglia di RIENTRO nella zona morta (deadzone * hysteresis_ratio),
-   la stessa che il firmware usa davvero per considerarsi "fermo" — non la
-   zona morta nominale, che nel firmware serve solo per uscire dalla sosta.
-
-2) RELAY — estrae Ku e Pu da un log di autotuning (relay feedback),
-   replicando l'identica logica a isteresi di relayStep()/runRelayAutotune()
-   nel firmware (non un semplice zero-crossing), cosi' il risultato
-   corrisponde a quello che il firmware ha calcolato e stampato sul
-   monitor seriale durante il test. Analizza H e V insieme per default,
-   mediando Ku/Pu esattamente come fa runRelayAutotune().
-
-ESEMPI D'USO
--------------
-Singola prova DOE, con zona morta nota:
-    python3 analyze_log.py doe run14_dz350_pm700_rep2.csv --deadzone 350
-
-Tutte le prove DOE in una cartella (nomi tipo run14_dz350_pm700_rep2.csv,
-la zona morta viene letta dal nome del file se non specificata a mano):
-    python3 analyze_log.py doe-batch ./prove_doe/ --output riepilogo_doe.csv
-
-CSV scaricato dopo /api/autotune (verifica incrociata col risultato firmware):
-    python3 analyze_log.py relay autotune_log.csv
-
-Richiede: pandas, numpy (pip install pandas numpy)
-"""
 
 import argparse
 import math
@@ -74,21 +33,9 @@ def load_csv(path: str) -> pd.DataFrame:
     return df
 
 
-# ============================================================================
-# ANALISI PROVE DOE: errore residuo, overshoot, tempo di assestamento
-# ============================================================================
 def analyze_doe(df: pd.DataFrame, deadzone: float = None, settle_window_ms: float = 1000.0,
                  hysteresis_ratio: float = FW_DEADZONE_HYSTERESIS_RATIO) -> dict:
-    """
-    Calcola per ciascun asse (H e V):
-      - residual_error: errore medio negli ultimi `settle_window_ms` millisecondi (valore di assestamento)
-      - overshoot: massimo scostamento assoluto rispetto al valore di assestamento, durante tutto il log
-      - settling_time_ms: primo istante da cui l'errore resta stabilmente dentro la soglia di
-        RIENTRO nella zona morta (deadzone * hysteresis_ratio) fino alla fine del log. Usa la
-        soglia di rientro (piu' stretta della zona morta nominale) perche' e' quella che il
-        firmware usa davvero per considerare l'asse "fermo" — vedi DEADZONE_HYSTERESIS_RATIO nel
-        main.cpp. None se `deadzone` non e' specificata.
-    """
+
     results = {}
     t = df["t_ms"].values.astype(float)
     effective_threshold = (deadzone * hysteresis_ratio) if deadzone is not None else None
@@ -218,13 +165,6 @@ def run_doe_batch(folder: str, output: str, deadzone_override: float, settle_win
     print("Colonne pronte per l'ANOVA: deadzone, deadlock, replica, residual_error_H/V, overshoot_H/V, settling_time_H/V_ms")
 
 
-# ============================================================================
-# ANALISI RELAY FEEDBACK / AUTOTUNING: Ku, Pu, Kp/Ki/Kd
-# Replica ESATTAMENTE la logica di relayStep()/runRelayAutotune() nel
-# firmware (isteresi sulla commutazione, scarto semicicli iniziali, media
-# picchi positivi/negativi, periodo = 2x durata media dei semicicli), cosi'
-# il risultato corrisponde a quello calcolato on-device.
-# ============================================================================
 def _replicate_relay_axis(t: np.ndarray, err: np.ndarray, hysteresis: float,
                            discard_halfcycles: int):
     """Ricostruisce lo stato del relè campione per campione, come relayStep()."""
@@ -348,9 +288,6 @@ def run_relay(path: str, axis: str, amplitude: float, hysteresis: float, discard
     print(f"Per riapplicarli manualmente: GET /api/pid?kp={res['Kp']}&ki={res['Ki']}&kd={res['Kd']}")
 
 
-# ============================================================================
-# CLI
-# ============================================================================
 def main():
     parser = argparse.ArgumentParser(
         description="Analizza i CSV esportati dal solar tracker (prove DOE o relay feedback/autotuning)."
