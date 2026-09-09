@@ -137,7 +137,7 @@ E' stato successivamente validato funzionalmente prima dei test firmware.
 
 Il sistema risulta funzionale ma non esponibile al sola dato il materiale utilizzato. Occorre quindi una ristampa.
 
-##Stampa Definitiva
+## Stampa Definitiva
 La versione finale è stata stampata in PETG e non ha più presentato i problemi di deformazione termica riscontrati con il PLA, confermando la stabilità strutturale della soluzione adottata.
 
 ## Metodologia sperimentale
