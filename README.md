@@ -8,6 +8,7 @@ Relatore: Prof. Damiano Varagnolo.
 - [Obiettivi](#obiettivi)
 - [Progettazione 3D](#progettazione-3d)
 - [Hardware](#hardware)
+- [Prototipo](#prototipo)
 - [Firmware](#firmware)
 - [Interfaccia web](#interfaccia-web)
 - [Metodologia sperimentale](#metodologia-sperimentale)
@@ -120,6 +121,16 @@ letture dei 4 LDR, stato del controllo PID, e permette di cambiare modalità,
 controllare manualmente i motori, tarare il PID, calibrare i sensori e
 scaricare i log come CSV.
 
+## Prototipo
+
+Il sistema è stato inizialmente stampato in  PLA, il quale inizia a subire deformazioni strutturali e a perdere la propria rigidità geometrica già all’interno dell’intervallo termico compreso tra i 50 °C e i 60 °C. 
+Si è quindi optato per il PETG, in grado di garantire una stabilità dimensionale anche in condizioni di calore moderato (fino ai 70 °C  - 75°C) superando così i limiti del PLA. Inoltre, presenta una maggiore opacità alla luce rispetto al PLA.
+
+Il circuito è stato assemblato e saldato manualmente con alcuni errori di collegamento verificatisi e successivamente corretti.
+E' stato successivamente validato funzionalmente prima dei test firmware.
+
+<img src="Images/foto%20prototipo%201%20-%20closeup.jpeg" width="400"> <img src="Images/foto%20prototipo%202%20.jpeg" width="400" height="300">
+<img src="Images/foto%20prototipo%203.jpeg" width="400"> <img src="Images/foto%20prototipo%204.jpeg" width="400" height="300">
 
 ## Metodologia sperimentale
 
