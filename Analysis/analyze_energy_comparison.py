@@ -1,33 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-analyze_energy_comparison.py — Analisi del confronto energetico tracker vs pannello fisso
-
-VERSIONE SENZA COLONNA TIMESTAMP: usa solo t_ms (millisecondi relativi
-dall'inizio del log, quello che il firmware genera davvero — vedi nota
-nel main.cpp: nessun RTC/NTP, solo millis()). Le fasce orarie sono quindi
-calcolate come terzi della durata totale del test (primo terzo/secondo
-terzo/ultimo terzo), non come "mattina/mezzogiorno/pomeriggio" in senso
-calendariale, dato che senza un orologio reale non possiamo saperlo con
-certezza.
-
-Prende in input un CSV con colonne:
-  t_ms, P_prod_fisso_mW, P_cons_fisso_mW, P_netto_fisso_mW,
-  P_prod_tracker_mW, P_cons_tracker_mW, P_netto_tracker_mW
-
-Calcola:
-  - Energia totale (Wh) per produzione/consumo/netto, entrambi i sistemi
-  - Test-t appaiato sul netto (implementato senza scipy)
-  - Vantaggio percentuale per terzo della durata del test
-Genera 4 grafici (PNG) nella cartella corrente, con asse x in ore
-trascorse dall'inizio del test (non orario di calendario).
-
-USO:
-    python3 analyze_energy_comparison.py confronto.csv --output-prefix giorno1
-
-Richiede: pandas, numpy, matplotlib. NON richiede scipy.
-"""
-
 import argparse
 import math
 import sys
@@ -39,9 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-# ============================================================================
-# Statistica senza scipy (stessa funzione beta incompleta di anova_doe.py)
-# ============================================================================
+
 def _betacf(a, b, x, max_iter=200, eps=3e-12):
     qab, qap, qam = a + b, a + 1.0, a - 1.0
     c, d = 1.0, 1.0 - qab * x / qap
@@ -104,9 +74,6 @@ def paired_ttest(a, b):
     return t, p, mean_d, sd_d
 
 
-# ============================================================================
-# Analisi
-# ============================================================================
 def energy_Wh(power_mW, t_hours):
     return np.trapezoid(power_mW, t_hours) / 1000.0
 
