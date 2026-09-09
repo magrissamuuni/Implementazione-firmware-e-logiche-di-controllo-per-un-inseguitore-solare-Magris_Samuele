@@ -6,6 +6,7 @@ Relatore: Prof. Damiano Varagnolo.
 
 - [Introduzione](#introduzione)
 - [Obiettivi](#obiettivi)
+- [Progettazione 3D](#progettazione-3d)
 - [Hardware](#hardware)
 - [Firmware](#firmware)
 - [Interfaccia web](#interfaccia-web)
@@ -33,6 +34,19 @@ Il firmware deve:
 - gestire il movimento dei servo-motori;
 
 //TODO finire
+
+## Progettazione 3D
+Il sistema meccanico è stato progettato tramite l'utilizzo di Fusion 360.
+E' progettato per permettere l'utilizzo di due servomotori SG90 che consentono il movimento bi-assiale. Per ricavare i dati di puntamento tramite le fotoresistenze è stata realizzata una struttura a croce che proietta un'ombra sulle LDR: quando il pannello è orientato perpendicolarmente al sole, l'ombra cade in modo simmetrico su tutti e quattro i sensori, azzerando la differenza di illuminamento tra loro:
+
+Il sistema composto da:
+- un ingranaggio con due strutture a forcella;
+- una croce per permettere di proiettare ombre sulle LDR;
+- due pignoni, che collegano li SG90 al resto della struttura;
+- una struttura rettangolare dove risiede il pannello;
+- un semi-ingranaggio;
+- una struttura di base. su cui poggia l'intero sistema.
+
 ## Hardware
 
 - Microcontrollore: ESP32 WROOM [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
