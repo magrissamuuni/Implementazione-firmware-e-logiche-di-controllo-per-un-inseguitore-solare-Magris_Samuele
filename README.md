@@ -8,9 +8,10 @@ Relatore: Prof. Damiano Varagnolo.
 - [Obiettivi](#obiettivi)
 - [Progettazione 3D](#progettazione-3d)
 - [Hardware](#hardware)
-- [Prototipo](#prototipo)
 - [Firmware](#firmware)
 - [Interfaccia web](#interfaccia-web)
+- [Prototipo](#prototipo)
+- [Stampa Definitiva](#stampa-definitiva)
 - [Metodologia sperimentale](#metodologia-sperimentale)
 - [Struttura del repository](#struttura-del-repository)
 - [Documentazione](#documentazione)
@@ -135,6 +136,9 @@ E' stato successivamente validato funzionalmente prima dei test firmware.
 //TOGLIERE FOTO PIEDE
 
 Il sistema risulta funzionale ma non esponibile al sola dato il materiale utilizzato. Occorre quindi una ristampa.
+
+##Stampa Definitiva
+La versione finale è stata stampata in PETG e non ha più presentato i problemi di deformazione termica riscontrati con il PLA, confermando la stabilità strutturale della soluzione adottata.
 
 ## Metodologia sperimentale
 
