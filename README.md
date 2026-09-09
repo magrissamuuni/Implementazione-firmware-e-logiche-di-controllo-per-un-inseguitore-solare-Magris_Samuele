@@ -129,8 +129,10 @@ Si è quindi optato per il PETG, in grado di garantire una stabilità dimensiona
 Il circuito è stato assemblato e saldato manualmente con alcuni errori di collegamento verificatisi e successivamente corretti.
 E' stato successivamente validato funzionalmente prima dei test firmware.
 
-<img src="Images/foto%20prototipo%201%20-%20closeup.jpeg" width="400"> <img src="Images/foto%20prototipo%202%20.jpeg" width="400" height="300">
-<img src="Images/foto%20prototipo%203.jpeg" width="400"> <img src="Images/foto%20prototipo%204.jpeg" width="400" height="300">
+<img src="Images/foto%20prototipo%204.jpeg" width="400"> <img src="Images/foto%20prototipo%202%20.jpeg" width="400">
+<img src="Images/foto%20prototipo%203.jpeg" width="400"> <img src="Images/foto%20prototipo%201%20-%20closeup.jpeg" width="400">
+
+Il sistema risulta funzionale ma non esponibile al sola dato il materiale utilizzato. Occorre quindi una ristampa.
 
 ## Metodologia sperimentale
 
