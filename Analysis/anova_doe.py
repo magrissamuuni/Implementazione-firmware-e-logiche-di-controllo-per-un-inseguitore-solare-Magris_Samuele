@@ -1,42 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-anova_doe.py — Analisi ANOVA + extra del riepilogo prodotto da
-`analyze_log.py doe-batch`
-
-VERSIONE SENZA SCIPY (vedi motivazione nella versione precedente: policy di
-sicurezza Windows che blocca i binari compilati di scipy). Tutte le
-formule statistiche sono implementate da zero con numpy e la libreria
-matematica standard di Python.
-
-Per ogni variabile di risposta, oltre all'ANOVA a una via e al confronto a
-coppie Bonferroni-corretto (gia' presenti nella versione precedente), ora
-calcola anche:
-
-  - REGRESSIONE LINEARE: il fattore (es. zona morta) e' quantitativo, non
-    solo categoriale — stima di quanto cresce la risposta per unita' di
-    fattore, con R^2 e p-value della pendenza.
-  - EFFECT SIZE (eta^2, omega^2): quanta varianza e' spiegata dal fattore,
-    utile anche quando l'ANOVA non e' significativa (un p-value alto non
-    vuol dire "nessun effetto", puo' voler dire "effetto reale ma piccolo
-    rispetto al rumore con questo numero di repliche").
-  - ANALISI DI POTENZA POST-HOC (via simulazione Monte Carlo): quante
-    repliche servirebbero per rilevare, con affidabilita', l'effetto delle
-    dimensioni osservate.
-  - CONFRONTO DELLE DEVIAZIONI STANDARD tra livelli (il fattore rende il
-    sistema piu' o meno ripetibile, non solo piu' o meno preciso in media).
-
-In coda, se sono presenti sia *_H che *_V per una stessa metrica, calcola
-anche la CORRELAZIONE tra errore H ed errore V prova per prova, e la
-VERIFICA DI COERENZA TEORICA tra errore residuo osservato e soglia di
-rientro nella zona morta (deadzone * hysteresis_ratio) prevista dal firmware.
-
-ESEMPIO D'USO
--------------
-    python3 anova_doe.py riepilogo_doe.csv --plot
-
-Richiede: pandas, numpy (e matplotlib solo se usi --plot). NON richiede scipy.
-"""
 
 import argparse
 import itertools
@@ -55,9 +18,6 @@ RESPONSE_COLUMNS = [
 FW_DEADZONE_HYSTERESIS_RATIO = 0.6  # DEADZONE_HYSTERESIS_RATIO nel firmware
 
 
-# ============================================================================
-# Funzioni statistiche di base (sostituiscono scipy.stats)
-# ============================================================================
 def _betacf(a: float, b: float, x: float, max_iter: int = 200, eps: float = 3e-12) -> float:
     qab = a + b
     qap = a + 1.0
@@ -219,13 +179,7 @@ def pearson_correlation_manual(x, y):
 
 
 def simulate_power(group_means, pooled_std, n_per_group, alpha=0.05, n_trials=3000, seed=42):
-    """
-    Potenza statistica stimata via simulazione Monte Carlo: genera n_trials
-    dataset finti con le medie osservate e deviazione standard aggregata
-    (pooled), con n_per_group campioni per livello, e conta la frazione di
-    volte in cui l'ANOVA risulterebbe significativa. Sostituisce il calcolo
-    analitico basato sulla F non centrale (che richiederebbe scipy).
-    """
+
     rng = np.random.default_rng(seed)
     significant = 0
     for _ in range(n_trials):
@@ -246,9 +200,6 @@ def required_n_for_power(group_means, pooled_std, alpha=0.05, target_power=0.8,
     return None, None
 
 
-# ============================================================================
-# Analisi DOE
-# ============================================================================
 def load_summary(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     if len(df) == 0:
