@@ -1,0 +1,23 @@
+# Build artifacts Arduino / PlatformIO
+.pio/
+build/
+*.hex
+*.bin
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+.venv/
+
+# Output generati dagli script 
+!docs/**/*.png
+!hardware/photos/*.png
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
