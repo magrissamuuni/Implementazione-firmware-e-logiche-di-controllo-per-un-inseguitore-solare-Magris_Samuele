@@ -41,11 +41,23 @@ E' progettato per permettere l'utilizzo di due servomotori SG90 che consentono i
 
 Il sistema composto da:
 - un ingranaggio con due strutture a forcella;
+  <br>
+  <img src="Images/SS%20-%20forcelle.png" width="500">
 - una croce per permettere di proiettare ombre sulle LDR;
+  <br>
+  <img src="Images/SS%20-%20croce%20LDR.png" width="500">
 - due pignoni, che collegano li SG90 al resto della struttura;
+  <br>
+  <img src="Images/SS%20-%20pignoneH.png" width="400">   <img src="Images/SS%20-%20pignoneV.png" width="400">
 - una struttura rettangolare dove risiede il pannello;
+  <br>
+    <img src="Images/SS%20-%20porta%20pannello.png" width="500">
 - un semi-ingranaggio;
+  <br>
+  <img src="Images/SS%20-%20semi%20ingranaggio.png" width="500">
 - una struttura di base. su cui poggia l'intero sistema.
+  <br>
+    <img src="Images/SS-Base%20Rettangolare.png" width="500">
 
 ## Hardware
 
