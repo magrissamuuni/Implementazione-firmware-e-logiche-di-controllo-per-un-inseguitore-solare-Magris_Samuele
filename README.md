@@ -13,7 +13,6 @@ Relatore: Prof. Damiano Varagnolo.
 - [Prototipo](#prototipo)
 - [Stampa Definitiva](#stampa-definitiva)
 - [Metodologia sperimentale](#metodologia-sperimentale)
-- [Struttura del repository](#struttura-del-repository)
 - [Documentazione](#documentazione)
 ## Introduzione
 Le fonti rinnovabili di energia sono viste come un'alternativa affidabile ai combustibili fossili grazie alla loro capacità di essere inesauribili.
@@ -35,7 +34,6 @@ Il firmware deve:
 - raccogliere le informazioni e i dati riguardo a: errori dei servomotori, luminosità delle fotoresistenze e parametri dei pannelli fotovoltaici;
 - gestire il movimento dei servo-motori;
 
-//TODO finire
 
 ## Progettazione 3D
 Il sistema meccanico è stato progettato tramite l'utilizzo di Fusion 360.
@@ -94,8 +92,7 @@ File: [`firmware/main.cpp`](firmware/main.cpp) + [`firmware/webpage.h`](firmware
 
 ### Funzionalità principali
 
-- Controllo PID reale su entrambi gli assi (filtro passa-basso sulle letture
-  LDR, anti-windup, uscita continua sui servo)
+- Controllo PID reale su entrambi gli assi
 - Autotuning automatico dei guadagni PID via relay feedback
   (metodo di Åström–Hägglund + formule di Ziegler-Nichols)
 - Calibrazione automatica dei 4 sensori LDR
@@ -133,8 +130,6 @@ E' stato successivamente validato funzionalmente prima dei test firmware.
 <img src="Images/foto%20prototipo%204.jpeg" width="400"> <img src="Images/foto%20prototipo%202%20.jpeg" width="400">
 <img src="Images/foto%20prototipo%203.jpeg" width="400"> <img src="Images/foto%20prototipo%201%20-%20closeup.jpeg" width="400">
 
-//TOGLIERE FOTO PIEDE
-
 Il sistema risulta funzionale ma non esponibile al sola dato il materiale utilizzato. Occorre quindi una ristampa.
 
 ## Stampa Definitiva
@@ -142,33 +137,22 @@ La versione finale è stata stampata in PETG e non ha più presentato i problemi
 
 ## Metodologia sperimentale
 
-//TODO
-
 I guadagni PID (Kp/Ki/Kd) **non** sono variabili sperimentali del DOE: sono
-tarati a parte tramite autotuning a relay feedback, avendo un metodo di
-teoria dei controlli per calcolarli direttamente. 
+tarati a parte tramite il metodo di Åström-Hägglund. Da questo otteniamo:
 
-Risultati completi in:
-//TODO
+$$K_u = \frac{1}{|G(j\omega_u)|} = \frac{4d}{\pi a}$$
 
-## Struttura del repository
-//TODO rifinire a progetto terminato
-```
-solar-tracker-esp32/
-├── firmware/
-│   ├── main.cpp          # firmware ESP32
-│   └── webpage.h         # interfaccia web (HTML/CSS/JS)
-├── analysis/
-│   ├── analyze_log.py               # estrazione metriche da log grezzi
-│   ├── anova_doe.py                 # analisi statistica del DOE
-│   ├── analyze_energy_comparison.py # confronto energetico tracker/fisso
-│   └── requirements.txt
-├── data/
-│   ├── doe_zona_morta/   
-│   └── riepilogo_doe.csv # riepilogo aggregato 
-└── docs/
-    └── matrice_DOE_randomizzata.csv        # ordine di esecuzione delle prove
-```
+$$P_u = \frac{2\pi}{\omega_u}$$
+
+Tramite le tabelle di Ziegler-Nichols:
+
+$$K_p = 0.6K_u \qquad T_i = \frac{P_u}{2} \qquad T_d = \frac{P_u}{8}$$
+
+$$K_p = 0.6K_u \qquad K_i = \frac{2K_p}{P_u} \qquad K_d = \frac{K_p P_u}{8}$$
+
+
+
+A differenza dei modelli teorici in tempo continuo, il microcontrollore elabora i segnali dei sensori a intervalli di tempo regolari e definiti (tempo di campionamento 𝑇𝑠=50𝑚𝑠)
 
 ## Documentazione
 [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
