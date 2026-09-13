@@ -175,6 +175,7 @@ A differenza dei modelli teorici in tempo continuo, il microcontrollore elabora 
 | Tempo di assestamento V | 1.601 | 0.215 | −42.82 | 0.069 | 0.092 |
 
 Nessuna delle variabili di risposta ha raggiunto la soglia di significatività, né tramite ANOVA né tramite regressione lineare.
+Nonostante il disegno sperimentale esteso fosse dimensionato per garantire l'80% di potenza rispetto all'effetto stimato nella fase preliminare, l'effetto osservato nel campione esteso è risultato sostanzialmente più piccolo della stima iniziale. 
 
 ## Documentazione
 [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
