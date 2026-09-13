@@ -13,6 +13,7 @@ Relatore: Prof. Damiano Varagnolo.
 - [Prototipo](#prototipo)
 - [Stampa Definitiva](#stampa-definitiva)
 - [Metodologia sperimentale](#metodologia-sperimentale)
+- [Design of Experiments](#design-of-experiments)
 - [Documentazione](#documentazione)
 ## Introduzione
 Le fonti rinnovabili di energia sono viste come un'alternativa affidabile ai combustibili fossili grazie alla loro capacità di essere inesauribili.
@@ -135,7 +136,9 @@ E' stato successivamente validato funzionalmente prima dei test firmware.
 Il sistema risulta funzionale ma non esponibile al sola dato il materiale utilizzato. Occorre quindi una ristampa.
 
 ## Stampa Definitiva
-La versione finale è stata stampata in PETG e non ha più presentato i problemi di deformazione termica riscontrati con il PLA, confermando la stabilità strutturale della soluzione adottata.
+La versione finale è stata stampata in PETG e non ha più presentato i problemi di deformazione termica riscontrati con il PLA, confermando la stabilità strutturale della soluzione adottata. <br> <br>
+<img src="Images/DEF_CloseUp.jpeg" width = "400"> <img src="Images/DEF_Laterale.jpeg" width = "400">  <img src="Images/DEF_Laterale2.jpeg" width = "400">
+
 
 ## Metodologia sperimentale
 
@@ -152,9 +155,20 @@ $$K_p = 0.6K_u \qquad T_i = \frac{P_u}{2} \qquad T_d = \frac{P_u}{8}$$
 
 $$K_p = 0.6K_u \qquad K_i = \frac{2K_p}{P_u} \qquad K_d = \frac{K_p P_u}{8}$$
 
-
-
 A differenza dei modelli teorici in tempo continuo, il microcontrollore elabora i segnali dei sensori a intervalli di tempo regolari e definiti (tempo di campionamento 𝑇𝑠=50𝑚𝑠)
+
+## Design of Experiments
+
+| Variabile | ANOVA F | ANOVA p | Pendenza | R² | Regressione p |
+|---|---|---|---|---|---|
+| Errore residuo H | 2.319 | 0.112 | +0.075 | 0.024 | 0.328 |
+| Errore residuo V | 2.329 | 0.111 | +0.010 | 0.001 | 0.884 |
+| Overshoot H | 1.940 | 0.157 | −0.435 | 0.037 | 0.222 |
+| Overshoot V | 0.913 | 0.410 | +0.123 | 0.007 | 0.609 |
+| Tempo di assestamento H | 2.389 | 0.105 | −50.68 | 0.079 | 0.072 |
+| Tempo di assestamento V | 1.601 | 0.215 | −42.82 | 0.069 | 0.092 |
+
+Nessuna delle variabili di risposta ha raggiunto la soglia di significatività, né tramite ANOVA né tramite regressione lineare.
 
 ## Documentazione
 [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
