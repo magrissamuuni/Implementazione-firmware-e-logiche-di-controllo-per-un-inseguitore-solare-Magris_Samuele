@@ -73,6 +73,12 @@ Il sistema composto da:
 - Modulo Step-UP: 1 modulo [MT3608](Datasheet/MT3608%20(step%20up)%20DataSheet.pdf)
 - Pannello solare: 5V
 
+Il circuito è alimentato da un pannello solare in silicio policristallino da 5V con potenza massima erogabile di 2.5W. Questo è collegato ad un modulo di ricarica TP4056 che permette la ricarica di una batteria LiPo 3.7V 2000mAh
+
+Un convertitore step-up MT3608 porta la tensione della batteria al livello richiesto dal circuito ovvero 5V. Quest’ultimo alimenta l’ESP32 e quindi l’intero circuito
+
+Sono state utilizzate 4 fotoresistenze (LDR) per rilevare la posizione del sole. Tramite l’ESP32 le fotoresistenze indicavano al sistema dove posizionarsi tramite l’utilizzo di due servomotori SG90
+
 ### Mappa dei pin
 
 - Servo orizzontale (H) = 19
