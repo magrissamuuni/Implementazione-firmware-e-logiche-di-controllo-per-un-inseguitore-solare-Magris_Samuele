@@ -85,14 +85,9 @@ int sogliaNotte = 100;
 int zonaMorta = 350; // Zona morta per evitare oscillazioni e pendolamento
 int sogliaPuntoMorto = 700; // Soglia per rilevare il punto morto diagonale (saddle point)
 
-// Consente di disattivare da interfaccia la logica di sblocco del punto morto
-// diagonale (utile in fase di test per isolarne l'effetto dal resto del controllo).
+
 bool puntoMortoAbilitato = true;
 
-// Isteresi sulla zona morta: per uscire dalla sosta serve superare zonaMorta per intero,
-// ma per rientrarci basta scendere sotto zonaMorta*RATIO. Senza questa differenza tra le
-// due soglie, un errore che oscilla per rumore proprio attorno a zonaMorta farebbe
-// accendere/spegnere il PID continuamente ad ogni ciclo di loop().
 const float DEADZONE_HYSTERESIS_RATIO = 0.6f;
 
 // Velocità ridotta in AUTO per test 
@@ -121,7 +116,6 @@ int mediaTotale = 0;
 bool puntoMortoAttivo = false; // True se rilevato punto morto diagonale
 bool isAutotuning = false;     // True durante il test di autotuning PID (relay feedback)
 
-// Filtro passa-basso (media mobile esponenziale) sulle letture LDR grezze
 const float LDR_FILTER_TAU_S = 0.15f;
 float filtTL = 0, filtTR = 0, filtBL = 0, filtBR = 0;
 bool ldrFilterInit = false;
@@ -129,18 +123,11 @@ bool ldrFilterInit = false;
 // Fattori di calibrazione per compensare le differenze di sensibilità tra i 4 LDR
 float calTL = 1.0f, calTR = 1.0f, calBL = 1.0f, calBR = 1.0f;
 
-// Oversampling ADC: più letture consecutive mediate riducono il rumore residuo
-// dell'ADC dell'ESP32 rispetto a una singola lettura.
 const int ADC_OVERSAMPLE_COUNT = 4;
 
-// Risparmio energetico: quando i servo restano fermi a lungo (Notte/Eco), si
-// staccano dal PWM invece di tenerli agganciati all'impulso neutro.
+// Risparmio energetico
 bool servosPowerSaved = false;
 
-// Ultimo impulso in microsecondi realmente scritto sui servo (dopo deadband e,
-// per V, dopo l'inversione di segno per il montaggio fisico invertito). Usato in
-// /api/data al posto di ricalcolare la formula, cosi' la telemetria riporta
-// sempre esattamente ciò che è stato scritto.
 int lastPulseHus = 1500;
 int lastPulseVus = 1500;
 
@@ -175,7 +162,6 @@ unsigned int logIntervalMs = 100;
 unsigned long logStartMillis = 0;
 unsigned long lastLogSampleMillis = 0;
 
-// AUTOTUNING PID — Relay Feedback (Åström–Hägglund)
 const double RELAY_AMPLITUDE = 2.0;         // "d": velocità fissa comandata dal relè
 const double RELAY_HYSTERESIS = 40.0;       // banda morta di commutazione
 const int RELAY_DISCARD_HALFCYCLES = 6;     // scarta il transitorio iniziale 
@@ -183,7 +169,6 @@ const int RELAY_COLLECT_HALFCYCLES = 14;    //  ~7 cicli per la stima
 const unsigned long RELAY_SAMPLE_INTERVAL_MS = 20;
 const unsigned long RELAY_TIMEOUT_MS = 45000; // failsafe
 
-// Stato del relè per un singolo asse (H o V), aggiornato un campione alla volta.
 struct RelayAxisState {
   int relayDir = 1;
   double halfCyclePeak = 0;
@@ -308,17 +293,12 @@ void powerSaveServos() {
   servosPowerSaved = true;
 }
 
-// Azzera il termine integrale e lo storico del PID (transizione MANUAL->AUTOMATIC
-// forza una reinizializzazione "bumpless" in PID_v1). Va chiamato ogni volta che il
-// tracker si ferma o esce dall'inseguimento continuo, altrimenti l'integrale accumulato
-// durante la sosta genererebbe uno scatto  al rientro in modalità AUTO.
+
 void resetPID(PID &pid) {
   pid.SetMode(MANUAL);
   pid.SetMode(AUTOMATIC);
 }
 
-// Media di ADC_OVERSAMPLE_COUNT letture consecutive sullo stesso pin, per ridurre
-// il rumore residuo dell'ADC dell'ESP32 rispetto a una singola lettura.
 int readLDROversampled(int pin) {
   long sum = 0;
   for (int i = 0; i < ADC_OVERSAMPLE_COUNT; i++) sum += analogRead(pin);
@@ -366,8 +346,6 @@ void sendToThingSpeak() {
   http.end();
 }
 
-// Carica da NVS la taratura PID, le soglie operative, l'abilitazione del punto
-// morto e i fattori di calibrazione LDR salvati in una sessione precedente.
 void loadSettingsFromNVS() {
   prefs.begin("solartrk", false);
   Kp = (double)prefs.getFloat("kp", 0.5f);
@@ -388,9 +366,6 @@ void loadSettingsFromNVS() {
   prefs.end();
 }
 
-// Salva su NVS la taratura PID, le soglie operative, l'abilitazione del punto
-// morto e i fattori di calibrazione LDR correnti (persistenza tra un riavvio e
-// l'altro dell'ESP32).
 void saveSettingsToNVS() {
   prefs.begin("solartrk", false);
   prefs.putFloat("kp", (float)Kp);
@@ -434,10 +409,7 @@ void calibrateLDRs() {
   saveSettingsToNVS();
 }
 
-// Avanza lo stato del relè di un asse di un campione: aggiorna il picco del
-// semiciclo corrente, rileva le commutazioni (con isteresi contro il rumore) e,
-// una volta scartato il transitorio iniziale, accumula i picchi e i periodi dei
-// semicicli "buoni" per il calcolo finale di Ku/Pu.
+
 void relayStep(RelayAxisState &st, double error, unsigned long nowMs, void (*setServo)(double)) {
   if (st.done) return;
 
@@ -475,17 +447,6 @@ void relayStep(RelayAxisState &st, double error, unsigned long nowMs, void (*set
   setServo(st.relayDir * RELAY_AMPLITUDE);
 }
 
-/**
- * Autotuning PID con Relay Feedback (Astrom-Hagglund) su entrambi gli assi in
- * parallelo. Pilota H e V con un relè bang-bang indipendente ciascuno, basato
- * sull'errore grezzo (oversampled+calibrato, non passato dal filtro lento a
- * costante di tempo: servirebbe solo a introdurre ritardo/attenuazione
- * nell'oscillazione che invece va misurata il più fedelmente possibile).
- * Ritorna true e valorizza Kp/Ki/Kd (media tra i due assi, che nel firmware
- * condividono la stessa taratura) se il test converge; false se va in timeout
- * (sistema che non oscilla a sufficienza: relè troppo piccolo, attrito
- * eccessivo, o luce insufficiente).
- */
 bool runRelayAutotune(double &outKp, double &outKi, double &outKd) {
   Serial.println("\n==================================================");
   Serial.println("[AUTOTUNE] Avvio relay feedback (Astrom-Hagglund)...");
@@ -818,9 +779,7 @@ void loop() {
     filtTL = rawTL; filtTR = rawTR; filtBL = rawBL; filtBR = rawBR;
     ldrFilterInit = true;
   } else {
-    // Alpha derivato dalla costante di tempo reale (dt gia' calcolato sopra per la
-    // cinematica), non fisso: cosi' il filtro resta coerente anche ora che il loop
-    // non ha più un delay(10) fisso a fine ciclo (vedi fondo di loop()).
+    
     float alpha = dt / (LDR_FILTER_TAU_S + dt);
     filtTL += alpha * (rawTL - filtTL);
     filtTR += alpha * (rawTR - filtTR);
@@ -864,9 +823,7 @@ void loop() {
   realEnergyWh += (inaPanelP_mW / 1000.0f) * deltaHours;
   efficienzaPercent = (inaPanelP_mW > 0.1f) ? (inaLoadP_mW / inaPanelP_mW * 100.0f) : 0.0f;
 
-  // Salvataggio periodico in NVS: non a ogni ciclo per non consumare inutilmente
-  // i cicli di scrittura della flash, ma abbastanza spesso da non perdere troppo
-  // in caso di spegnimento improvviso.
+
   if (now - lastEnergySaveMs >= ENERGY_SAVE_INTERVAL_MS) {
     lastEnergySaveMs = now;
     prefs.begin("solartrk", false);
