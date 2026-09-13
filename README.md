@@ -176,6 +176,11 @@ A differenza dei modelli teorici in tempo continuo, il microcontrollore elabora 
 
 Nessuna delle variabili di risposta ha raggiunto la soglia di significatività, né tramite ANOVA né tramite regressione lineare.
 Nonostante il disegno sperimentale esteso fosse dimensionato per garantire l'80% di potenza rispetto all'effetto stimato nella fase preliminare, l'effetto osservato nel campione esteso è risultato sostanzialmente più piccolo della stima iniziale. 
+<br>
+Due sensori LDR saturano al valore massimo e il comportamento è coerente con un sottodimensionamento del partitore resistivo che non garantisce un margine sufficiente in condizioni di elevata luminosità.
+Con due sensori bloccati allo stesso valore le formule di errore si riducono algebricamente in modo tale che errore H ed errore V diventano l'uno l'esatto opposto dell'altro
+
+
 
 ## Documentazione
 [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
