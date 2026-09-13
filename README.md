@@ -64,13 +64,13 @@ Il sistema composto da:
 
 ## Hardware
 
-- Microcontrollore: ESP32 WROOM [ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
-- Sensori: 4 fotoresistenze (LDR) [LDR](Datasheet/GL55-LDR%20DataSheet.pdf)
-- Attuatori: 2 servomotori [SG90](Datasheet/SG90%20DataSheet.pdf)
-- Batteria: 1 batteria ricaricabile al litio [103450](Datasheet/Battery%203.7%20V%202000mAh%20103450%20DataSheet.pdf)
-- Ricarica e protezione: 1 modulo di ricarica con 1 chip di protezione [TP5046](Datasheet/TP4056%20(modulo%20ricarica)%20DataSheet.pdf) [DW01A](Datasheet/DW01A%20(chip%20protezione)%20DataSheet.pdf)
-- Lettore Voltaggio/Corrente: [INA219](Datasheet/ina219%20(current%20power%20monitor)%20DataSheet.pdf)
-- Modulo Step-UP: 1 modulo [MT3608](Datasheet/MT3608%20(step%20up)%20DataSheet.pdf)
+- Microcontrollore: ESP32 WROOM [ESP32](DataSheet/esp32-wroom-32_datasheet_en.pdf)
+- Sensori: 4 fotoresistenze (LDR) [LDR](DataSheet/GL55-LDR%20DataSheet.pdf)
+- Attuatori: 2 servomotori [SG90](DataSheet/SG90%20DataSheet.pdf)
+- Batteria: 1 batteria ricaricabile al litio [103450](DataSheet/Battery%203.7%20V%202000mAh%20103450%20DataSheet.pdf)
+- Ricarica e protezione: 1 modulo di ricarica con 1 chip di protezione [TP5046](DataSheet/TP4056%20(modulo%20ricarica)%20DataSheet.pdf) [DW01A](DataSheet/DW01A%20(chip%20protezione)%20DataSheet.pdf)
+- Lettore Voltaggio/Corrente: [INA219](DataSheet/ina219%20(current%20power%20monitor)%20DataSheet.pdf)
+- Modulo Step-UP: 1 modulo [MT3608](DataSheet/MT3608%20(step%20up)%20DataSheet.pdf)
 - Pannello solare: 5V
 
 Il circuito è alimentato da un pannello solare in silicio policristallino da 5V con potenza massima erogabile di 2.5W. Questo è collegato ad un modulo di ricarica TP4056 che permette la ricarica di una batteria LiPo 3.7V 2000mAh
