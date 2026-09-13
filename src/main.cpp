@@ -4,16 +4,17 @@
 #include <ESP32Servo.h>
 #include <PID_v1.h>
 #include <Preferences.h>
+#include <Wire.h>
+#include <Adafruit_INA219.h>
+#include <HTTPClient.h>
 #include "webpage.h"
 
 // Modalità di Funzionamento
 enum OperatingMode {
   MODE_AUTO,
   MODE_MANUAL,
-  MODE_NIGHT,
-  MODE_ECO,
-  MODE_SEARCH_SUN,
-  MODE_AUTOTUNE
+  MODE_AUTOTUNE,
+  MODE_DOE
 };
 
 OperatingMode currentMode = MODE_AUTO;
@@ -23,11 +24,18 @@ String modeString = "auto";
 const char* ap_ssid = "SolarTracker-ESP32";
 const char* ap_password = "12345678";
 
+const char* sta_ssid = "Vodafone-A88177131";
+const char* sta_password = "fzp8cufl6yftdu63";
+const char* thingspeakApiKey = "ARCV8FVL0QVK370W";
+const unsigned long THINGSPEAK_INTERVAL_MS = 30000UL;
+unsigned long lastThingspeakSendMillis = 0;
+bool thingspeakLastSendOk = false;
+
 WebServer server(80);
 
 // Pin Servo 360 Continuous
-const int pinServoH = 19; 
-const int pinServoV = 18; 
+const int pinServoH = 21; //21
+const int pinServoV = 18; //18
 
 Servo servoH;
 Servo servoV;
@@ -39,11 +47,26 @@ int STOP_V_US = 1500;
 // Pin Sensori LDR 
 const int ldrTL = 35; // Top Left (Alto SX)
 const int ldrTR = 33; // Top Right (Alto DX)
-const int ldrBL = 34; // Bottom Left (Basso SX)
-const int ldrBR = 32; // Bottom Right (Basso DX)
+const int ldrBL = 32; // Bottom Left (Basso SX)
+const int ldrBR = 34; // Bottom Right (Basso DX)
 
 // Pin Lettura Tensione Pannello Solare
-const int pinSolarVolt = 36; 
+const int pinSolarVolt = 36;
+
+const int pinSDA = 4;
+const int pinSCL = 5;
+
+uint8_t inaAddrPanel = 0x40;
+uint8_t inaAddrLoad = 0x41;
+Adafruit_INA219 *inaPanel = nullptr;
+Adafruit_INA219 *inaLoad = nullptr;
+bool inaPanelOk = false;
+bool inaLoadOk = false;
+
+float inaPanelV = 0.0f, inaPanelI_mA = 0.0f, inaPanelP_mW = 0.0f;
+float inaLoadV = 0.0f, inaLoadI_mA = 0.0f, inaLoadP_mW = 0.0f;
+float realEnergyWh = 0.0f;
+float efficienzaPercent = 0.0f;
 
 // Parametri PID
 double setpointH = 0, inputH, outputH;
@@ -75,18 +98,10 @@ const float DEADZONE_HYSTERESIS_RATIO = 0.6f;
 // Velocità ridotta in AUTO per test 
 int maxAutoSpeed = 3; // Limite di velocità per rotazione fluida e precisa in AUTO
 
-// Opzione Finecorsa Hardware  Asse Y
-const bool USE_HARDWARE_LIMITS = false;
-const int pinLimitYMin = 22;
-const int pinLimitYMax = 23;
-
 // Variabili per Controllo Manuale
 int manualVelH = 0; // -15 a +15
 int manualVelV = 0; // -15 a +15
 
-// Failsafe controllo manuale: se non arriva nessun comando entro
-// questo intervallo, il tracker torna da solo in AUTO invece di restare fermo in
-// manuale a tempo indeterminato 
 const unsigned long MANUAL_TIMEOUT_MS = 2000;
 unsigned long lastManualCmdMillis = 0;
 
@@ -104,7 +119,6 @@ int valDiag2 = 0;      // Diagonale 2: TR + BL
 int diffDiagonali = 0; // Differenza (Diag1 - Diag2)
 int mediaTotale = 0;
 bool puntoMortoAttivo = false; // True se rilevato punto morto diagonale
-bool isSearchingSun = false;   // True durante la scansione ricerca sole
 bool isAutotuning = false;     // True durante il test di autotuning PID (relay feedback)
 
 // Filtro passa-basso (media mobile esponenziale) sulle letture LDR grezze
@@ -143,10 +157,15 @@ unsigned long lastPosUpdate = 0;
 double activeSpeedH = 0;
 double activeSpeedV = 0;
 
+const float V_ANGLE_MIN = -60.0f;
+const float V_ANGLE_MAX = 60.0f;
+bool vAxisAtLimit = false;
+
 // Logging in RAM con esportazione CSV
 struct LogSample {
   uint32_t t;
   int16_t errH, errV, pulseH, pulseV, tl, tr, bl, br;
+  int16_t vPanel_mV, iPanel_mA, vLoad_mV, iLoad_mA;
 };
 const int MAX_LOG_SAMPLES = 1500;
 LogSample logBuffer[MAX_LOG_SAMPLES];
@@ -176,6 +195,25 @@ struct RelayAxisState {
   bool done = false;
 };
 
+struct DoeRun {
+  int run;
+  int deadzone;
+  int replica;
+  String filename;
+};
+const int MAX_DOE_RUNS = 60;
+DoeRun doeRuns[MAX_DOE_RUNS];
+int doeRunCount = 0;
+int doeCurrentIndex = -1;
+bool doeActive = false;
+bool doeRunReady = false;
+unsigned long doeRunDurationMs = 60000;
+unsigned long doeRunStartMillis = 0;
+bool doeKicking = false;
+unsigned long doeKickStartMillis = 0;
+const int DOE_KICK_SPEED = 8;
+const unsigned long DOE_KICK_DURATION_MS = 2000;
+
 // Dichiarazioni Funzioni
 int speedToPulseUS(double speed, int stopUS);
 void setServoH(double speed);
@@ -189,20 +227,33 @@ void loadSettingsFromNVS();
 void saveSettingsToNVS();
 void relayStep(RelayAxisState &st, double error, unsigned long nowMs, void (*setServo)(double));
 bool runRelayAutotune(double &outKp, double &outKi, double &outKd);
-void eseguiRicercaSole();
+void runAutoTracking();
+void initINA();
+void readINASensors();
+void doeStartKick();
+void doeBeginLogging(int idx);
+bool doeGuard();
 void setupWebServer();
 void handleRoot();
 void handleApiData();
 void handleApiMode();
 void handleApiControl();
 void handleApiPID();
-void handleApiFindSun();
 void handleApiCalibrate();
+void handleApiResetPos();
 void handleApiLogStart();
 void handleApiLogStop();
 void handleApiLogStatus();
 void handleApiLogCsv();
 void handleApiAutotune();
+void handleApiInaConfig();
+void handleApiInaScan();
+void handleApiDoeUpload();
+void handleApiDoeStart();
+void handleApiDoeNext();
+void handleApiDoeStop();
+void handleApiDoeStatus();
+void sendToThingSpeak();
 
 int speedToPulseUS(double speed, int stopUS) {
   if (speed > 0.02) {
@@ -225,6 +276,14 @@ void setServoH(double speed) {
 // Il servo verticale è montato fisicamente con orientamento invertito rispetto
 // a quello orizzontale
 void setServoV(double speed) {
+  vAxisAtLimit = false;
+  if (speed > 0 && posV >= V_ANGLE_MAX) {
+    speed = 0;
+    vAxisAtLimit = true;
+  } else if (speed < 0 && posV <= V_ANGLE_MIN) {
+    speed = 0;
+    vAxisAtLimit = true;
+  }
   if (!servoV.attached()) {
     servoV.attach(pinServoV, 1000, 2000);
     servosPowerSaved = false;
@@ -266,6 +325,47 @@ int readLDROversampled(int pin) {
   return (int)(sum / ADC_OVERSAMPLE_COUNT);
 }
 
+void initINA() {
+  if (inaPanel) { delete inaPanel; inaPanel = nullptr; }
+  if (inaLoad) { delete inaLoad; inaLoad = nullptr; }
+  inaPanel = new Adafruit_INA219(inaAddrPanel);
+  inaLoad = new Adafruit_INA219(inaAddrLoad);
+  inaPanelOk = inaPanel->begin(&Wire);
+  inaLoadOk = inaLoad->begin(&Wire);
+}
+
+void readINASensors() {
+  if (inaPanelOk) {
+    inaPanelV = inaPanel->getBusVoltage_V() + (inaPanel->getShuntVoltage_mV() / 1000.0f);
+    inaPanelI_mA = inaPanel->getCurrent_mA();
+    inaPanelP_mW = inaPanel->getPower_mW();
+  }
+  if (inaLoadOk) {
+    inaLoadV = inaLoad->getBusVoltage_V() + (inaLoad->getShuntVoltage_mV() / 1000.0f);
+    inaLoadI_mA = inaLoad->getCurrent_mA();
+    inaLoadP_mW = inaLoad->getPower_mW();
+  }
+}
+
+void sendToThingSpeak() {
+  WiFiClient client;
+  HTTPClient http;
+  String url = "http://api.thingspeak.com/update?api_key=" + String(thingspeakApiKey) +
+    "&field1=" + String(inaPanelV, 3) +
+    "&field2=" + String(inaPanelI_mA, 1) +
+    "&field3=" + String(inaPanelP_mW, 1) +
+    "&field4=" + String(inaLoadV, 3) +
+    "&field5=" + String(inaLoadI_mA, 1) +
+    "&field6=" + String(inaLoadP_mW, 1) +
+    "&field7=" + String(efficienzaPercent, 1) +
+    "&field8=" + String(realEnergyWh, 4);
+  http.begin(client, url);
+  int httpCode = http.GET();
+  String payload = (httpCode == 200) ? http.getString() : "";
+  thingspeakLastSendOk = (httpCode == 200) && (payload.toInt() > 0);
+  http.end();
+}
+
 // Carica da NVS la taratura PID, le soglie operative, l'abilitazione del punto
 // morto e i fattori di calibrazione LDR salvati in una sessione precedente.
 void loadSettingsFromNVS() {
@@ -282,6 +382,9 @@ void loadSettingsFromNVS() {
   calBL = prefs.getFloat("calBL", 1.0f);
   calBR = prefs.getFloat("calBR", 1.0f);
   totalEnergyWh = prefs.getFloat("energyWh", 0.0f);
+  realEnergyWh = prefs.getFloat("realEnergyWh", 0.0f);
+  inaAddrPanel = prefs.getUChar("inaAddrP", 0x40);
+  inaAddrLoad = prefs.getUChar("inaAddrL", 0x41);
   prefs.end();
 }
 
@@ -353,7 +456,7 @@ void relayStep(RelayAxisState &st, double error, unsigned long nowMs, void (*set
     unsigned long duration = nowMs - st.lastSwitchMs;
 
     if (st.halfCycleIndex > RELAY_DISCARD_HALFCYCLES) {
-      // Il semiciclo appena concluso (direzione st.relayDir, prima del flip sotto)
+      // Il semiciclo appena concluso 
       if (st.relayDir > 0) { st.posPeakSum += st.halfCyclePeak; st.posPeakCount++; }
       else { st.negPeakSum += st.halfCyclePeak; st.negPeakCount++; }
       st.periodSumMs += duration;
@@ -424,6 +527,7 @@ bool runRelayAutotune(double &outKp, double &outKi, double &outKd) {
 
       relayStep(stH, errH, nowMs, setServoH);
       relayStep(stV, errV, nowMs, setServoV);
+      readINASensors();
 
       if (logCount < MAX_LOG_SAMPLES) {
         LogSample &s = logBuffer[logCount++];
@@ -433,6 +537,10 @@ bool runRelayAutotune(double &outKp, double &outKi, double &outKd) {
         s.pulseH = (int16_t)lastPulseHus;
         s.pulseV = (int16_t)lastPulseVus;
         s.tl = (int16_t)tl; s.tr = (int16_t)tr; s.bl = (int16_t)bl; s.br = (int16_t)br;
+        s.vPanel_mV = (int16_t)(inaPanelV * 1000.0f);
+        s.iPanel_mA = (int16_t)inaPanelI_mA;
+        s.vLoad_mV = (int16_t)(inaLoadV * 1000.0f);
+        s.iLoad_mA = (int16_t)inaLoadI_mA;
       }
     }
 
@@ -476,117 +584,128 @@ bool runRelayAutotune(double &outKp, double &outKi, double &outKd) {
   return true;
 }
 
+void runAutoTracking() {
+  double rawH = (double)((valTL + valBL) - (valTR + valBR));
+  double rawV = (double)((valTL + valTR) - (valBL + valBR));
 
-void eseguiRicercaSole() {
-  Serial.println("\n==================================================");
-  Serial.println("☀️ [SUN FINDER] AVVIO PROCEDURA RICERCA SOLE");
-  Serial.println("==================================================");
+  int maxLDR = max(max(valTL, valTR), max(valBL, valBR));
 
-  isSearchingSun = true;
-  stopServos();
-  delay(200);
-
-  // 1. Lettura iniziale sensori (oversampled e calibrati)
-  int ldr1 = (int)(readLDROversampled(ldrTL) * calTL);
-  int ldr2 = (int)(readLDROversampled(ldrTR) * calTR);
-  int ldr3 = (int)(readLDROversampled(ldrBL) * calBL);
-  int ldr4 = (int)(readLDROversampled(ldrBR) * calBR);
-  int maxIniziale = max(max(ldr1, ldr2), max(ldr3, ldr4));
-  int mediaIniziale = (ldr1 + ldr2 + ldr3 + ldr4) / 4;
-
-  Serial.printf("[SUN FINDER] Lettura iniziale -> Media: %d | Max: %d | Soglia Notte: %d\n", 
-                mediaIniziale, maxIniziale, sogliaNotte);
-
-  // Se la luminosità è sotto la soglia notte, non ruotare a vuoto
-  if (maxIniziale < sogliaNotte) {
-    Serial.println("[SUN FINDER] Luminosita' ambientale insufficiente (< sogliaNotte). Tracker in standby.");
-    stopServos();
-    isSearchingSun = false;
+  if (maxLDR < sogliaNotte) {
+    powerSaveServos();
+    inputH = 0;
+    inputV = 0;
+    outputH = 0;
+    outputV = 0;
+    puntoMortoAttivo = false;
+    pidActiveH = false;
+    pidActiveV = false;
     return;
   }
 
-  // 2. Scansione Orizzontale a 360° 
-  const int searchSpeed = 4;
-  const unsigned long SCAN_DURATION_MS = 6000;
-  const unsigned long SAMPLE_INTERVAL_MS = 50;
+  bool errHZero = (abs(rawH) <= zonaMorta);
+  bool errVZero = (abs(rawV) <= zonaMorta);
+  bool diagAltissima = (abs(diffDiagonali) >= sogliaPuntoMorto);
 
-  int maxLightFound = 0;
-  unsigned long timeOfMaxLight = 0;
-  unsigned long startScan = millis();
+  if (puntoMortoAbilitato && errHZero && errVZero && diagAltissima) {
+    puntoMortoAttivo = true;
 
-  Serial.println("[SUN FINDER] Inizio scansione orizzontale a 360 gradi...");
-  setServoH(searchSpeed);
+    int escapeSpeedH = 0;
+    int escapeSpeedV = 0;
 
-  while (millis() - startScan < SCAN_DURATION_MS) {
-    unsigned long elapsed = millis() - startScan;
-    
-    int tl = (int)(readLDROversampled(ldrTL) * calTL);
-    int tr = (int)(readLDROversampled(ldrTR) * calTR);
-    int bl = (int)(readLDROversampled(ldrBL) * calBL);
-    int br = (int)(readLDROversampled(ldrBR) * calBR);
-    int currentAvg = (tl + tr + bl + br) / 4;
-
-    if (currentAvg > maxLightFound) {
-      maxLightFound = currentAvg;
-      timeOfMaxLight = elapsed;
-    }
-
-    server.handleClient();
-    delay(SAMPLE_INTERVAL_MS);
-  }
-
-  stopServos();
-  delay(250);
-
-  Serial.printf("[SUN FINDER] Scansione terminata! Picco max: %d a t=%lu ms\n", 
-                maxLightFound, timeOfMaxLight);
-
-  // 3. Ritorno orientato verso la posizione con massima luce
-  if (maxLightFound > sogliaNotte) {
-    unsigned long returnTime = SCAN_DURATION_MS - timeOfMaxLight;
-    Serial.printf("[SUN FINDER] Ritorno indietro verso la posizione del sole per %lu ms...\n", returnTime);
-
-    setServoH(-searchSpeed);
-    unsigned long startReturn = millis();
-
-    while (millis() - startReturn < returnTime) {
-      int tl = (int)(readLDROversampled(ldrTL) * calTL);
-      int tr = (int)(readLDROversampled(ldrTR) * calTR);
-      int bl = (int)(readLDROversampled(ldrBL) * calBL);
-      int br = (int)(readLDROversampled(ldrBR) * calBR);
-      int cur = (tl + tr + bl + br) / 4;
-
-      // Se riagganciamo il picco con anticipo (>= 95%), blocca per massima precisione
-      if (cur >= (int)(maxLightFound * 0.95)) {
-        Serial.println("[SUN FINDER] Picco luminoso riagganciato con precisione!");
-        break;
+    if (diffDiagonali > 0) {
+      if (valTL >= valBR) {
+        escapeSpeedH = maxAutoSpeed;
+        escapeSpeedV = maxAutoSpeed;
+      } else {
+        escapeSpeedH = -maxAutoSpeed;
+        escapeSpeedV = -maxAutoSpeed;
       }
-
-      server.handleClient();
-      delay(30);
+    } else {
+      if (valTR >= valBL) {
+        escapeSpeedH = -maxAutoSpeed;
+        escapeSpeedV = maxAutoSpeed;
+      } else {
+        escapeSpeedH = maxAutoSpeed;
+        escapeSpeedV = -maxAutoSpeed;
+      }
     }
+
+    if (escapeSpeedH == 0 && escapeSpeedV == 0) {
+      escapeSpeedH = (diffDiagonali > 0) ? maxAutoSpeed : -maxAutoSpeed;
+      escapeSpeedV = maxAutoSpeed;
+    }
+
+    setServoH(escapeSpeedH);
+    setServoV(escapeSpeedV);
+    outputH = escapeSpeedH;
+    outputV = escapeSpeedV;
+    inputH = rawH;
+    inputV = rawV;
+    pidActiveH = false;
+    pidActiveV = false;
+  } else {
+    puntoMortoAttivo = false;
+
+    inputH = rawH;
+    inputV = rawV;
+
+    double parkThresholdH = zonaMorta * DEADZONE_HYSTERESIS_RATIO;
+    bool shouldParkH = pidActiveH ? (abs(inputH) <= parkThresholdH) : (abs(inputH) <= zonaMorta);
+    if (shouldParkH) {
+      outputH = 0;
+      if (pidActiveH) { resetPID(pidH); pidActiveH = false; }
+    } else {
+      if (!pidActiveH) { resetPID(pidH); pidActiveH = true; }
+      pidH.Compute();
+    }
+    setServoH(outputH);
+
+    double parkThresholdV = zonaMorta * DEADZONE_HYSTERESIS_RATIO;
+    bool shouldParkV = pidActiveV ? (abs(inputV) <= parkThresholdV) : (abs(inputV) <= zonaMorta);
+    if (shouldParkV) {
+      outputV = 0;
+      if (pidActiveV) { resetPID(pidV); pidActiveV = false; }
+    } else {
+      if (!pidActiveV) { resetPID(pidV); pidActiveV = true; }
+      pidV.Compute();
+    }
+    setServoV(outputV);
   }
+}
 
+void doeStartKick() {
+  doeKicking = true;
+  doeKickStartMillis = millis();
+  loggingActive = false;
+  doeRunReady = false;
+  pidActiveH = false;
+  pidActiveV = false;
+  setServoV(0);
+  setServoH(-DOE_KICK_SPEED);
+}
+
+void doeBeginLogging(int idx) {
+  doeKicking = false;
   stopServos();
-  delay(200);
-
-  // 4. Regolazione zenitale verticale iniziale (inclinazione verso l'alto)
-  Serial.println("[SUN FINDER] Ottimizzazione inclinazione zenitale iniziale...");
-  setServoV(2);
-  delay(350);
-  stopServos();
-
-  Serial.println("☀️ [SUN FINDER] Sole agganciato! Modalita' automatica attiva.");
-  Serial.println("==================================================\n");
-
-  isSearchingSun = false;
-  currentMode = MODE_AUTO;
-  modeString = "auto";
-  // Riparte con PID puliti: niente integrale ereditato dalla scansione manuale appena eseguita.
+  zonaMorta = doeRuns[idx].deadzone;
+  logCount = 0;
+  logStartMillis = millis();
+  lastLogSampleMillis = 0;
+  loggingActive = true;
+  doeRunStartMillis = millis();
+  doeRunReady = false;
   resetPID(pidH);
   resetPID(pidV);
   pidActiveH = false;
   pidActiveV = false;
+}
+
+bool doeGuard() {
+  if (doeActive) {
+    server.send(409, "application/json", "{\"status\":\"error\",\"message\":\"Test DOE in corso\"}");
+    return true;
+  }
+  return false;
 }
 
 void setup() {
@@ -629,6 +748,12 @@ void setup() {
   pinMode(ldrBR, INPUT);
   pinMode(pinSolarVolt, INPUT);
 
+  Wire.begin(pinSDA, pinSCL);
+  initINA();
+  Serial.printf("INA219 -> Pannello(0x%02X): %s | Load(0x%02X): %s\n",
+                inaAddrPanel, inaPanelOk ? "OK" : "NON TROVATO",
+                inaAddrLoad, inaLoadOk ? "OK" : "NON TROVATO");
+
   // Configurazione Wi-Fi SoftAP
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap_ssid, ap_password);
@@ -638,20 +763,31 @@ void setup() {
   Serial.print(" SSID: "); Serial.println(ap_ssid);
   Serial.print(" IP per collegarsi da Smartphone: "); Serial.println(apIP);
 
+  WiFi.begin(sta_ssid, sta_password);
+  unsigned long staStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - staStart < 15000) {
+    delay(250);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Connesso alla rete Wi-Fi! IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("Connessione alla rete Wi-Fi non riuscita, continuo solo con Access Point.");
+  }
+
   // Configurazione Web Server
   setupWebServer();
   server.begin();
   Serial.println("Web Server avviato sulla porta 80!");
 
   lastEnergyCalc = millis();
-
-  // Esecuzione Ricerca Sole all'Avvio
-  eseguiRicercaSole();
 }
 
 void loop() {
   // Gestione delle richieste dagli smartphone collegati al WebServer
   server.handleClient();
+
+  readINASensors();
 
   // 0. Aggiornamento cinematica posizione virtuale e velocità H/V
   unsigned long nowPos = millis();
@@ -666,8 +802,8 @@ void loop() {
   }
   if (activeSpeedV != 0) {
     posV += activeSpeedV * SPEED_TO_DEG_PER_SEC * dt;
-    if (posV > 60.0f) posV = 60.0f;
-    if (posV < -60.0f) posV = -60.0f;
+    if (posV > V_ANGLE_MAX) posV = V_ANGLE_MAX;
+    if (posV < V_ANGLE_MIN) posV = V_ANGLE_MIN;
   }
 
   // 1. Lettura Sensori LDR  e Calcolo Diagonali
@@ -725,6 +861,8 @@ void loop() {
   float deltaHours = (now - lastEnergyCalc) / 3600000.0;
   lastEnergyCalc = now;
   totalEnergyWh += solarPower * deltaHours;
+  realEnergyWh += (inaPanelP_mW / 1000.0f) * deltaHours;
+  efficienzaPercent = (inaPanelP_mW > 0.1f) ? (inaLoadP_mW / inaPanelP_mW * 100.0f) : 0.0f;
 
   // Salvataggio periodico in NVS: non a ogni ciclo per non consumare inutilmente
   // i cicli di scrittura della flash, ma abbastanza spesso da non perdere troppo
@@ -733,6 +871,7 @@ void loop() {
     lastEnergySaveMs = now;
     prefs.begin("solartrk", false);
     prefs.putFloat("energyWh", totalEnergyWh);
+    prefs.putFloat("realEnergyWh", realEnergyWh);
     prefs.end();
   }
 
@@ -740,108 +879,22 @@ void loop() {
   switch (currentMode) {
 
     case MODE_AUTO: {
-      // Calcolo Errori Assiali Primari (Orizzontale H e Verticale V)
-      // rawH: (Sinistra) - (Destra) = (valTL + valBL) - (valTR + valBR)
-      // rawV: (Alto) - (Basso) = (valTL + valTR) - (valBL + valBR)
-      double rawH = (double)((valTL + valBL) - (valTR + valBR));
-      double rawV = (double)((valTL + valTR) - (valBL + valBR));
+      runAutoTracking();
+      break;
+    }
 
-      // Trova il sensore più luminoso (maxLDR), usato per il controllo notte
-      int maxLDR = max(max(valTL, valTR), max(valBL, valBR));
-
-      // Controllo Notte (se anche il sensore più luminoso è sotto sogliaNotte, spegne i motori)
-      if (maxLDR < sogliaNotte) {
-        powerSaveServos();
-        inputH = 0;
-        inputV = 0;
-        outputH = 0;
-        outputV = 0;
-        puntoMortoAttivo = false;
-        pidActiveH = false;
-        pidActiveV = false;
-        break;
-      }
-
-      // 4. LOGICA RISOLUZIONE PUNTO MORTO DIAGONALE:
-      // Se l'errore H e V sono a zero (o entro la zona morta),
-      // MA la differenza tra le diagonali è altissima (|diffDiagonali| >= sogliaPuntoMorto),
-      // siamo nel punto morto : spostiamo la posizione per sbloccare il sistema.
-      bool errHZero = (abs(rawH) <= zonaMorta);
-      bool errVZero = (abs(rawV) <= zonaMorta);
-      bool diagAltissima = (abs(diffDiagonali) >= sogliaPuntoMorto);
-
-      if (puntoMortoAbilitato && errHZero && errVZero && diagAltissima) {
-          puntoMortoAttivo = true;
-
-        int escapeSpeedH = 0;
-        int escapeSpeedV = 0;
-
-        if (diffDiagonali > 0) {
-          // Diagonale 1 (TL + BR) dominante su Diagonale 2 (TR + BL)
-          if (valTL >= valBR) {
-            // Predilige Top-Left (+H, +V)
-            escapeSpeedH = maxAutoSpeed;
-            escapeSpeedV = maxAutoSpeed;
-          } else {
-            // Predilige Bottom-Right (-H, -V)
-            escapeSpeedH = -maxAutoSpeed;
-            escapeSpeedV = -maxAutoSpeed;
-          }
-        } else {
-          // Diagonale 2 (TR + BL) dominante su Diagonale 1 (TL + BR)
-          if (valTR >= valBL) {
-            // Predilige Top-Right (-H, +V)
-            escapeSpeedH = -maxAutoSpeed;
-            escapeSpeedV = maxAutoSpeed;
-          } else {
-            // Predilige Bottom-Left (+H, -V)
-            escapeSpeedH = maxAutoSpeed;
-            escapeSpeedV = -maxAutoSpeed;
-          }
+    case MODE_DOE: {
+      if (doeActive && doeKicking) {
+        if (millis() - doeKickStartMillis >= DOE_KICK_DURATION_MS) {
+          doeBeginLogging(doeCurrentIndex);
         }
-
-        // Failsafe nel caso di perfetta simmetria diagonale: impulso di sblocco
-        if (escapeSpeedH == 0 && escapeSpeedV == 0) {
-          escapeSpeedH = (diffDiagonali > 0) ? maxAutoSpeed : -maxAutoSpeed;
-          escapeSpeedV = maxAutoSpeed;
-        }
-
-        setServoH(escapeSpeedH);
-        setServoV(escapeSpeedV);
-        outputH = escapeSpeedH;
-        outputV = escapeSpeedV;
-        inputH = rawH;
-        inputV = rawV;
-        pidActiveH = false;
-        pidActiveV = false;
       } else {
-        puntoMortoAttivo = false;
-
-        inputH = rawH;
-        inputV = rawV;
-
-        double parkThresholdH = zonaMorta * DEADZONE_HYSTERESIS_RATIO;
-        bool shouldParkH = pidActiveH ? (abs(inputH) <= parkThresholdH) : (abs(inputH) <= zonaMorta);
-        if (shouldParkH) {
-          outputH = 0;
-          if (pidActiveH) { resetPID(pidH); pidActiveH = false; }
-        } else {
-          if (!pidActiveH) { resetPID(pidH); pidActiveH = true; }
-          pidH.Compute();
+        runAutoTracking();
+        if (doeActive && !doeRunReady && (millis() - doeRunStartMillis >= doeRunDurationMs)) {
+          stopServos();
+          loggingActive = false;
+          doeRunReady = true;
         }
-        setServoH(outputH);
-
-        // Asse Verticale: stessa logica con isteresi dell'asse orizzontale.
-        double parkThresholdV = zonaMorta * DEADZONE_HYSTERESIS_RATIO;
-        bool shouldParkV = pidActiveV ? (abs(inputV) <= parkThresholdV) : (abs(inputV) <= zonaMorta);
-        if (shouldParkV) {
-          outputV = 0;
-          if (pidActiveV) { resetPID(pidV); pidActiveV = false; }
-        } else {
-          if (!pidActiveV) { resetPID(pidV); pidActiveV = true; }
-          pidV.Compute();
-        }
-        setServoV(outputV);
       }
       break;
     }
@@ -852,16 +905,10 @@ void loop() {
         stopServos();
         manualVelH = 0;
         manualVelV = 0;
-        currentMode = MODE_AUTO;
-        modeString = "auto";
         inputH = 0;
         inputV = 0;
         outputH = 0;
         outputV = 0;
-        resetPID(pidH);
-        resetPID(pidV);
-        pidActiveH = false;
-        pidActiveV = false;
       } else {
         setServoH(manualVelH);
         setServoV(manualVelV);
@@ -870,31 +917,6 @@ void loop() {
         outputH = manualVelH;
         outputV = manualVelV;
       }
-      break;
-    }
-
-    case MODE_NIGHT: {
-      puntoMortoAttivo = false;
-      powerSaveServos();
-      inputH = 0;
-      inputV = 0;
-      outputH = 0;
-      outputV = 0;
-      break;
-    }
-
-    case MODE_ECO: {
-      puntoMortoAttivo = false;
-      powerSaveServos();
-      inputH = 0;
-      inputV = 0;
-      outputH = 0;
-      outputV = 0;
-      break;
-    }
-
-    case MODE_SEARCH_SUN: {
-      eseguiRicercaSole();
       break;
     }
 
@@ -937,6 +959,10 @@ void loop() {
         s.tr = (int16_t)valTR;
         s.bl = (int16_t)valBL;
         s.br = (int16_t)valBR;
+        s.vPanel_mV = (int16_t)(inaPanelV * 1000.0f);
+        s.iPanel_mA = (int16_t)inaPanelI_mA;
+        s.vLoad_mV = (int16_t)(inaLoadV * 1000.0f);
+        s.iLoad_mA = (int16_t)inaLoadI_mA;
       } else {
         loggingActive = false; // buffer pieno, stop automatico
       }
@@ -953,6 +979,11 @@ void loop() {
                   valTL, valTR, valBL, valBR,
                   valDiag1, valDiag2, diffDiagonali,
                   solarVoltage, solarPower);
+  }
+
+  if (WiFi.status() == WL_CONNECTED && (millis() - lastThingspeakSendMillis >= THINGSPEAK_INTERVAL_MS)) {
+    lastThingspeakSendMillis = millis();
+    sendToThingSpeak();
   }
 }
 
@@ -973,11 +1004,9 @@ void setupWebServer() {
   // API Aggiornamento Taratura PID, Soglie e Deadlock (mutante: solo POST)
   server.on("/api/pid", HTTP_POST, handleApiPID);
 
-  // API Trigger Ricerca Sole On-Demand (mutante: solo POST)
-  server.on("/api/findsun", HTTP_POST, handleApiFindSun);
-
   // API Calibrazione dei 4 LDR sotto luce uniforme (mutante: solo POST)
   server.on("/api/calibrate", HTTP_POST, handleApiCalibrate);
+  server.on("/api/resetpos", HTTP_POST, handleApiResetPos);
 
   // API Logging CSV in RAM: avvio/stop (mutanti, POST) e lettura stato/export (GET)
   server.on("/api/log/start", HTTP_POST, handleApiLogStart);
@@ -987,6 +1016,15 @@ void setupWebServer() {
 
   // API Autotuning PID (Relay Feedback) On-Demand (mutante: solo POST)
   server.on("/api/autotune", HTTP_POST, handleApiAutotune);
+
+  server.on("/api/ina/config", HTTP_POST, handleApiInaConfig);
+  server.on("/api/ina/scan", HTTP_GET, handleApiInaScan);
+
+  server.on("/api/doe/upload", HTTP_POST, handleApiDoeUpload);
+  server.on("/api/doe/start", HTTP_POST, handleApiDoeStart);
+  server.on("/api/doe/next", HTTP_POST, handleApiDoeNext);
+  server.on("/api/doe/stop", HTTP_POST, handleApiDoeStop);
+  server.on("/api/doe/status", HTTP_GET, handleApiDoeStatus);
 
   // Gestione errore 404
   server.onNotFound([]() {
@@ -1003,7 +1041,7 @@ void handleApiData() {
     lastManualCmdMillis = millis();
   }
 
-  char jsonBuffer[900];
+  char jsonBuffer[1200];
   snprintf(jsonBuffer, sizeof(jsonBuffer),
     "{"
       "\"v\":%.2f,"
@@ -1018,7 +1056,6 @@ void handleApiData() {
       "\"diag2\":%d,"
       "\"diffDiag\":%d,"
       "\"deadlock\":%s,"
-      "\"findingSun\":%s,"
       "\"autotuning\":%s,"
       "\"powerSaved\":%s,"
       "\"errH\":%.0f,"
@@ -1041,7 +1078,21 @@ void handleApiData() {
       "\"logMaxSamples\":%d,"
       "\"mode\":\"%s\","
       "\"uptime\":%lu,"
-      "\"heap\":%u"
+      "\"heap\":%u,"
+      "\"vPanelIna\":%.3f,"
+      "\"iPanelIna\":%.1f,"
+      "\"pPanelIna\":%.1f,"
+      "\"vLoadIna\":%.3f,"
+      "\"iLoadIna\":%.1f,"
+      "\"pLoadIna\":%.1f,"
+      "\"inaPanelOk\":%s,"
+      "\"inaLoadOk\":%s,"
+      "\"posV\":%.1f,"
+      "\"vAtLimit\":%s,"
+      "\"efficienza\":%.1f,"
+      "\"realEnergy\":%.3f,"
+      "\"wifiSta\":%s,"
+      "\"cloudOk\":%s"
     "}",
     solarVoltage,
     solarCurrent,
@@ -1050,7 +1101,6 @@ void handleApiData() {
     valTL, valTR, valBL, valBR,
     valDiag1, valDiag2, diffDiagonali,
     puntoMortoAttivo ? "true" : "false",
-    isSearchingSun ? "true" : "false",
     isAutotuning ? "true" : "false",
     servosPowerSaved ? "true" : "false",
     inputH, inputV,
@@ -1065,12 +1115,23 @@ void handleApiData() {
     logCount, MAX_LOG_SAMPLES,
     modeString.c_str(),
     millis() / 1000,
-    ESP.getFreeHeap()
+    ESP.getFreeHeap(),
+    inaPanelV, inaPanelI_mA, inaPanelP_mW,
+    inaLoadV, inaLoadI_mA, inaLoadP_mW,
+    inaPanelOk ? "true" : "false",
+    inaLoadOk ? "true" : "false",
+    posV,
+    vAxisAtLimit ? "true" : "false",
+    efficienzaPercent,
+    realEnergyWh,
+    (WiFi.status() == WL_CONNECTED) ? "true" : "false",
+    thingspeakLastSendOk ? "true" : "false"
   );
   server.send(200, "application/json", jsonBuffer);
 }
 
 void handleApiMode() {
+  if (doeGuard()) return;
   if (server.hasArg("mode")) {
     String m = server.arg("mode");
     resetPID(pidH);
@@ -1086,21 +1147,6 @@ void handleApiMode() {
       currentMode = MODE_MANUAL;
       modeString = "manual";
       lastManualCmdMillis = millis();
-    } else if (m == "night") {
-      currentMode = MODE_NIGHT;
-      modeString = "night";
-      manualVelH = 0;
-      manualVelV = 0;
-    } else if (m == "eco") {
-      currentMode = MODE_ECO;
-      modeString = "eco";
-      manualVelH = 0;
-      manualVelV = 0;
-    } else if (m == "findsun") {
-      currentMode = MODE_SEARCH_SUN;
-      modeString = "findsun";
-      manualVelH = 0;
-      manualVelV = 0;
     }
     char jsonBuffer[96];
     snprintf(jsonBuffer, sizeof(jsonBuffer), "{\"status\":\"ok\",\"mode\":\"%s\"}", modeString.c_str());
@@ -1111,6 +1157,7 @@ void handleApiMode() {
 }
 
 void handleApiControl() {
+  if (doeGuard()) return;
   if (server.hasArg("cmd")) {
     String cmd = server.arg("cmd");
     currentMode = MODE_MANUAL;
@@ -1142,6 +1189,7 @@ void handleApiControl() {
 }
 
 void handleApiPID() {
+  if (doeGuard()) return;
   for (int i = 0; i < server.args(); i++) {
     String name = server.argName(i);
     String val = server.arg(i);
@@ -1176,12 +1224,6 @@ void handleApiPID() {
   server.send(200, "application/json", jsonBuffer);
 }
 
-void handleApiFindSun() {
-  currentMode = MODE_SEARCH_SUN;
-  modeString = "findsun";
-  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Ricerca sole avviata\"}");
-}
-
 void handleApiCalibrate() {
   calibrateLDRs();
   char jsonBuffer[160];
@@ -1192,7 +1234,15 @@ void handleApiCalibrate() {
   server.send(200, "application/json", jsonBuffer);
 }
 
+void handleApiResetPos() {
+  posH = 0.0f;
+  posV = 0.0f;
+  vAxisAtLimit = false;
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
 void handleApiAutotune() {
+  if (doeGuard()) return;
   currentMode = MODE_AUTOTUNE;
   modeString = "autotune";
   server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Autotuning PID avviato (relay feedback)\"}");
@@ -1229,16 +1279,175 @@ void handleApiLogStatus() {
 }
 
 void handleApiLogCsv() {
-  server.sendHeader("Content-Disposition", "attachment; filename=solar_log.csv");
+  String filename = "solar_log.csv";
+  if (doeActive && doeCurrentIndex >= 0 && doeCurrentIndex < doeRunCount && doeRuns[doeCurrentIndex].filename.length() > 0) {
+    filename = doeRuns[doeCurrentIndex].filename;
+  }
+  server.sendHeader("Content-Disposition", "attachment; filename=" + filename);
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/csv", "");
-  server.sendContent("t_ms,errH,errV,pulseH_us,pulseV_us,tl,tr,bl,br\r\n");
-  char row[140];
+  server.sendContent("t_ms,errH,errV,pulseH_us,pulseV_us,tl,tr,bl,br,v_panel_mV,i_panel_mA,v_load_mV,i_load_mA\r\n");
+  char row[180];
   for (int i = 0; i < logCount; i++) {
     LogSample &s = logBuffer[i];
-    snprintf(row, sizeof(row), "%lu,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
-             (unsigned long)s.t, s.errH, s.errV, s.pulseH, s.pulseV, s.tl, s.tr, s.bl, s.br);
+    snprintf(row, sizeof(row), "%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
+             (unsigned long)s.t, s.errH, s.errV, s.pulseH, s.pulseV, s.tl, s.tr, s.bl, s.br,
+             s.vPanel_mV, s.iPanel_mA, s.vLoad_mV, s.iLoad_mA);
     server.sendContent(row);
   }
   server.sendContent("");
+}
+
+void handleApiInaConfig() {
+  if (doeGuard()) return;
+  if (server.hasArg("panelAddr")) {
+    long a = strtol(server.arg("panelAddr").c_str(), nullptr, 0);
+    if (a > 0 && a < 256) inaAddrPanel = (uint8_t)a;
+  }
+  if (server.hasArg("loadAddr")) {
+    long a = strtol(server.arg("loadAddr").c_str(), nullptr, 0);
+    if (a > 0 && a < 256) inaAddrLoad = (uint8_t)a;
+  }
+  prefs.begin("solartrk", false);
+  prefs.putUChar("inaAddrP", inaAddrPanel);
+  prefs.putUChar("inaAddrL", inaAddrLoad);
+  prefs.end();
+  initINA();
+  char jsonBuffer[160];
+  snprintf(jsonBuffer, sizeof(jsonBuffer),
+    "{\"status\":\"ok\",\"panelAddr\":%d,\"loadAddr\":%d,\"panelOk\":%s,\"loadOk\":%s}",
+    inaAddrPanel, inaAddrLoad, inaPanelOk ? "true" : "false", inaLoadOk ? "true" : "false"
+  );
+  server.send(200, "application/json", jsonBuffer);
+}
+
+void handleApiInaScan() {
+  if (doeGuard()) return;
+  String addrList = "";
+  bool first = true;
+  for (uint8_t addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      if (!first) addrList += ",";
+      char buf[6];
+      snprintf(buf, sizeof(buf), "%d", addr);
+      addrList += buf;
+      first = false;
+    }
+  }
+  String json = "{\"status\":\"ok\",\"addresses\":[" + addrList + "]}";
+  server.send(200, "application/json", json);
+}
+
+void handleApiDoeUpload() {
+  if (doeGuard()) return;
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Corpo mancante\"}");
+    return;
+  }
+  String body = server.arg("plain");
+  doeRunCount = 0;
+  int pos = 0;
+  int len = body.length();
+  while (pos < len && doeRunCount < MAX_DOE_RUNS) {
+    int nl = body.indexOf('\n', pos);
+    String line = (nl == -1) ? body.substring(pos) : body.substring(pos, nl);
+    pos = (nl == -1) ? len : nl + 1;
+    line.trim();
+    if (line.length() == 0 || !isDigit(line.charAt(0))) continue;
+    int c1 = line.indexOf(',');
+    int c2 = (c1 == -1) ? -1 : line.indexOf(',', c1 + 1);
+    int c3 = (c2 == -1) ? -1 : line.indexOf(',', c2 + 1);
+    if (c1 < 0 || c2 < 0 || c3 < 0) continue;
+    int c4 = line.indexOf(',', c3 + 1);
+    String fname = (c4 == -1) ? line.substring(c3 + 1) : line.substring(c3 + 1, c4);
+    fname.trim();
+    doeRuns[doeRunCount].run = line.substring(0, c1).toInt();
+    doeRuns[doeRunCount].deadzone = line.substring(c1 + 1, c2).toInt();
+    doeRuns[doeRunCount].replica = line.substring(c2 + 1, c3).toInt();
+    doeRuns[doeRunCount].filename = fname;
+    doeRunCount++;
+  }
+  char jsonBuffer[96];
+  snprintf(jsonBuffer, sizeof(jsonBuffer), "{\"status\":\"ok\",\"runs\":%d}", doeRunCount);
+  server.send(200, "application/json", jsonBuffer);
+}
+
+void handleApiDoeStart() {
+  if (doeRunCount == 0) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Nessuna matrice DOE caricata\"}");
+    return;
+  }
+  if (server.hasArg("duration")) {
+    long d = server.arg("duration").toInt();
+    if (d > 0) doeRunDurationMs = (unsigned long)d * 1000UL;
+  }
+  doeCurrentIndex = 0;
+  doeActive = true;
+  currentMode = MODE_DOE;
+  modeString = "doe";
+  doeStartKick();
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void handleApiDoeNext() {
+  if (!doeActive) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Test DOE non attivo\"}");
+    return;
+  }
+  doeCurrentIndex++;
+  if (doeCurrentIndex >= doeRunCount) {
+    doeActive = false;
+    doeKicking = false;
+    doeRunReady = false;
+    loggingActive = false;
+    stopServos();
+    currentMode = MODE_AUTO;
+    modeString = "auto";
+    resetPID(pidH);
+    resetPID(pidV);
+    pidActiveH = false;
+    pidActiveV = false;
+    server.send(200, "application/json", "{\"status\":\"ok\",\"done\":true}");
+    return;
+  }
+  doeStartKick();
+  server.send(200, "application/json", "{\"status\":\"ok\",\"done\":false}");
+}
+
+void handleApiDoeStop() {
+  doeActive = false;
+  doeKicking = false;
+  doeRunReady = false;
+  loggingActive = false;
+  stopServos();
+  currentMode = MODE_AUTO;
+  modeString = "auto";
+  resetPID(pidH);
+  resetPID(pidV);
+  pidActiveH = false;
+  pidActiveV = false;
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void handleApiDoeStatus() {
+  int run = 0, deadzone = 0, replica = 0;
+  String filename = "";
+  if (doeCurrentIndex >= 0 && doeCurrentIndex < doeRunCount) {
+    run = doeRuns[doeCurrentIndex].run;
+    deadzone = doeRuns[doeCurrentIndex].deadzone;
+    replica = doeRuns[doeCurrentIndex].replica;
+    filename = doeRuns[doeCurrentIndex].filename;
+  }
+  unsigned long elapsed = (doeActive && !doeKicking) ? (millis() - doeRunStartMillis) : 0;
+  char jsonBuffer[340];
+  snprintf(jsonBuffer, sizeof(jsonBuffer),
+    "{\"active\":%s,\"positioning\":%s,\"ready\":%s,\"totalRuns\":%d,\"currentIndex\":%d,\"run\":%d,\"deadzone\":%d,\"replica\":%d,\"filename\":\"%s\",\"elapsedMs\":%lu,\"durationMs\":%lu}",
+    doeActive ? "true" : "false",
+    doeKicking ? "true" : "false",
+    doeRunReady ? "true" : "false",
+    doeRunCount, doeCurrentIndex, run, deadzone, replica, filename.c_str(),
+    elapsed, doeRunDurationMs
+  );
+  server.send(200, "application/json", jsonBuffer);
 }
