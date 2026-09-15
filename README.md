@@ -92,7 +92,7 @@ Sono state utilizzate 4 fotoresistenze (LDR) per rilevare la posizione del sole.
 
 ## Firmware
 
-File: [`firmware/main.cpp`](firmware/main.cpp) + [`firmware/webpage.h`](firmware/webpage.h)
+File: [`src/main.cpp`](src/main.cpp) + [`include/webpage.h`](include/webpage.h)
 
 ### Librerie richieste (Arduino IDE / PlatformIO)
 
