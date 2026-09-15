@@ -24,9 +24,9 @@ String modeString = "auto";
 const char* ap_ssid = "SolarTracker-ESP32";
 const char* ap_password = "12345678";
 
-const char* sta_ssid = "Vodafone-A88177131";
-const char* sta_password = "fzp8cufl6yftdu63";
-const char* thingspeakApiKey = "ARCV8FVL0QVK370W";
+const char* sta_ssid = "TUO_SSID";
+const char* sta_password = "TUA_PASSWORD";
+const char* thingspeakApiKey = "TUO_API";
 const unsigned long THINGSPEAK_INTERVAL_MS = 30000UL;
 unsigned long lastThingspeakSendMillis = 0;
 bool thingspeakLastSendOk = false;
