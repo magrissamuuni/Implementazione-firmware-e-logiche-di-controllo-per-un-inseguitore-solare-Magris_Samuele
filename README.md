@@ -190,10 +190,10 @@ I campioni 450-600 dell’inseguitore riflettono un annuvolamento avvenuto duran
 
 
 ## Documentazione
-[ESP32](Datasheet/esp32-wroom-32_datasheet_en.pdf)
-[LDR](Datasheet/GL55-LDR%20DataSheet.pdf)
-[SG90](Datasheet/SG90%20DataSheet.pdf)
-[103450](Datasheet/Battery%203.7%20V%202000mAh%20103450%20DataSheet.pdf)
-[TP5046](Datasheet/TP4056%20(modulo%20ricarica)%20DataSheet.pdf) [DW01A](Datasheet/DW01A%20(chip%20protezione)%20DataSheet.pdf)
-[INA219](Datasheet/ina219%20(current%20power%20monitor)%20DataSheet.pdf)
-[MT3608](Datasheet/MT3608%20(step%20up)%20DataSheet.pdf)
+[ESP32](DataSheet/esp32-wroom-32_datasheet_en.pdf)
+[LDR](DataSheet/GL55-LDR%20DataSheet.pdf)
+[SG90](DataSheet/SG90%20DataSheet.pdf)
+[103450](DataSheet/Battery%203.7%20V%202000mAh%20103450%20DataSheet.pdf)
+[TP5046](DataSheet/TP4056%20(modulo%20ricarica)%20DataSheet.pdf) [DW01A](Datasheet/DW01A%20(chip%20protezione)%20DataSheet.pdf)
+[INA219](DataSheet/ina219%20(current%20power%20monitor)%20DataSheet.pdf)
+[MT3608](DataSheet/MT3608%20(step%20up)%20DataSheet.pdf)
