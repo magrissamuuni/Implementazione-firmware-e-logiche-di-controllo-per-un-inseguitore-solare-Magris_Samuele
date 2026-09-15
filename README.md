@@ -14,6 +14,7 @@ Relatore: Prof. Damiano Varagnolo.
 - [Stampa Definitiva](#stampa-definitiva)
 - [Metodologia sperimentale](#metodologia-sperimentale)
 - [Design of Experiments](#design-of-experiments)
+- [Confronto](#confronto)
 - [Documentazione](#documentazione)
 ## Introduzione
 Le fonti rinnovabili di energia sono viste come un'alternativa affidabile ai combustibili fossili grazie alla loro capacità di essere inesauribili.
@@ -180,6 +181,12 @@ Nonostante il disegno sperimentale esteso fosse dimensionato per garantire l'80%
 Due sensori LDR saturano al valore massimo e il comportamento è coerente con un sottodimensionamento del partitore resistivo che non garantisce un margine sufficiente in condizioni di elevata luminosità.
 Con due sensori bloccati allo stesso valore le formule di errore si riducono algebricamente in modo tale che errore H ed errore V diventano l'uno l'esatto opposto dell'altro
 
+## Confronto
+
+<img src="Images/Confronto%20Pannelli.png">
+L'inseguimento biassiale garantisce un'erogazione media di 1.8 W - 2.0 W, incrementando la resa rispetto all'installazione statica di circa il 50-70% nello stesso intervallo.
+In entrambi i casi il consumo del carico è il medesimo. 
+I campioni 450-600 dell’inseguitore riflettono un annuvolamento avvenuto durante la raccolta dati.
 
 
 ## Documentazione
